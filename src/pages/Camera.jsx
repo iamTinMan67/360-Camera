@@ -288,11 +288,20 @@ export default function Camera() {
         }
       }
 
-    setCapturedShots(shots)
-    if (shots.length > 0) {
-      setCapturedMedia(shots[0]) // Show first shot as preview
+      setCapturedShots(shots)
+      if (shots.length > 0) {
+        setCapturedMedia(shots[0]) // Show first shot as preview
+        console.log('Photo capture complete:', shots.length, 'shots')
+      } else {
+        console.error('No photos captured')
+        alert('Failed to capture photo. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error during photo capture:', error)
+      alert('An error occurred while capturing the photo. Please try again.')
+    } finally {
+      setIsCapturing(false)
     }
-    setIsCapturing(false)
   }
 
   const getSupportedMimeType = () => {
