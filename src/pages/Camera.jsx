@@ -460,20 +460,48 @@ export default function Camera() {
           return
         }
         
+        console.log('🎥 CAMERA DEBUG: Attempting to play video, current state:', {
+          paused: video.paused,
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          srcObject: !!video.srcObject
+        })
+        
         try {
-          await video.play()
-          console.log('🎥 CAMERA DEBUG: Video play initiated in useEffect')
+          // Force play - sometimes need to call multiple times
+          if (video.paused) {
+            await video.play()
+            console.log('✅ CAMERA DEBUG: Video play() successful in useEffect')
+          } else {
+            console.log('🎥 CAMERA DEBUG: Video already playing')
+          }
         } catch (error) {
           // Handle specific error types
           if (error.name === 'AbortError' || error.message?.includes('aborted')) {
             console.warn('⚠️ CAMERA DEBUG: Video play aborted by browser (may be autoplay policy or element replaced)')
-            // Don't set error, just log - the video might still work
+            // Retry after a delay
+            setTimeout(() => {
+              if (videoRef.current && !videoRef.current.paused) {
+                videoRef.current.play().catch(err => console.warn('Retry play failed:', err))
+              }
+            }, 500)
           } else {
-            console.warn('⚠️ CAMERA DEBUG: Video play error in useEffect:', error)
+            console.error('❌ CAMERA DEBUG: Video play error in useEffect:', error)
+            // Try again after a delay
+            setTimeout(() => {
+              if (videoRef.current && videoRef.current.paused) {
+                videoRef.current.play().catch(err => console.warn('Retry play failed:', err))
+              }
+            }, 1000)
           }
         }
       }
-      playVideo()
+      
+      // Wait a moment for srcObject to be set, then play
+      setTimeout(() => {
+        playVideo()
+      }, 100)
       
       // Check if video is ready (more lenient check - just need valid dimensions)
       const checkVideoReady = () => {
@@ -1056,9 +1084,25 @@ export default function Camera() {
                     // Ensure video plays when metadata is loaded (Safari)
                     if (videoRef.current) {
                       const video = videoRef.current
-                      video.play().catch(err => {
-                        console.warn('⚠️ CAMERA DEBUG: Video autoplay failed in onLoadedMetadata:', err)
+                      console.log('🎥 CAMERA DEBUG: onLoadedMetadata - video state:', {
+                        paused: video.paused,
+                        readyState: video.readyState,
+                        videoWidth: video.videoWidth,
+                        videoHeight: video.videoHeight
                       })
+                      if (video.paused) {
+                        video.play().then(() => {
+                          console.log('✅ CAMERA DEBUG: Video play successful in onLoadedMetadata')
+                        }).catch(err => {
+                          console.warn('⚠️ CAMERA DEBUG: Video autoplay failed in onLoadedMetadata:', err)
+                          // Retry after delay
+                          setTimeout(() => {
+                            if (videoRef.current && videoRef.current.paused) {
+                              videoRef.current.play().catch(e => console.warn('Retry play in onLoadedMetadata failed:', e))
+                            }
+                          }, 500)
+                        })
+                      }
                       // Check if ready after metadata loads - try multiple times
                       const checkReady = () => {
                         console.log('🎥 CAMERA DEBUG: onLoadedMetadata checkReady:', {
@@ -1218,6 +1262,23 @@ export default function Camera() {
                 <RefreshCw className="h-5 w-5 animate-spin" />
                 <span>Starting camera...</span>
               </div>
+            ) : stream && !videoReady && videoRef.current && videoRef.current.paused ? (
+              <button
+                onClick={async () => {
+                  if (videoRef.current) {
+                    try {
+                      await videoRef.current.play()
+                      console.log('✅ CAMERA DEBUG: Manual play successful')
+                    } catch (error) {
+                      console.error('❌ CAMERA DEBUG: Manual play failed:', error)
+                    }
+                  }
+                }}
+                className="btn-primary"
+              >
+                <Video className="inline-block mr-2 h-5 w-5" />
+                Start Video
+              </button>
             ) : stream ? (
               <>
                 <button onClick={toggleFacingMode} className="btn-secondary" disabled={isCapturing || isRecording || isUploading}>
