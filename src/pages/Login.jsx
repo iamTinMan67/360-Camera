@@ -17,27 +17,9 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      // Try to import auth.js, fallback to default credentials
-      // Note: In a client-side app, credentials will be visible in the bundle
-      let ADMIN_CREDENTIALS
-      try {
-        const authModule = await import('../config/auth.js')
-        ADMIN_CREDENTIALS = authModule.ADMIN_CREDENTIALS
-      } catch (importError) {
-        // If auth.js doesn't exist (e.g., in Vercel build), use default fallback
-        ADMIN_CREDENTIALS = {
-          username: 'sal@sb',
-          password: 'Sal@SB'
-        }
-      }
-      
-      if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-        const success = await login(username, password)
-        if (success) {
-          navigate('/events')
-        } else {
-          setError('Login failed. Please try again.')
-        }
+      const success = await login(username, password)
+      if (success) {
+        navigate('/events')
       } else {
         setError('Invalid username or password')
       }
