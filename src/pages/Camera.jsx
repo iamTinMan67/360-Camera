@@ -1043,15 +1043,15 @@ export default function Camera() {
         <div className="space-y-4">
           {/* Video Preview */}
           <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-            {stream ? (
-              <>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                  onLoadedMetadata={() => {
+            {/* Always render video element so ref is available */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+              style={{ display: stream ? 'block' : 'none' }}
+              onLoadedMetadata={() => {
                     console.log('🎥 CAMERA DEBUG: onLoadedMetadata event fired')
                     // Ensure video plays when metadata is loaded (Safari)
                     if (videoRef.current) {
@@ -1121,8 +1121,10 @@ export default function Camera() {
                       ]
                     })
                   }}
-                />
-                <canvas ref={canvasRef} className="hidden" />
+            />
+            <canvas ref={canvasRef} className="hidden" />
+            {stream && (
+              <>
                 {capturedMedia && (
                   <div className="absolute inset-0 bg-black">
                     {capturedMedia.type === 'photo' ? (
@@ -1141,7 +1143,8 @@ export default function Camera() {
                   </div>
                 )}
               </>
-            ) : cameraError ? (
+            )}
+            {!stream && cameraError && (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                 <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
                 <h3 className="text-xl font-bold text-white mb-2">{cameraError.title}</h3>
