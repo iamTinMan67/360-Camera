@@ -211,17 +211,36 @@ export default function Camera() {
   }, [stream])
 
   const capturePhoto = async () => {
-    if (!videoRef.current || !canvasRef.current || isCapturing) return
+    if (!videoRef.current || !canvasRef.current || isCapturing) {
+      console.warn('Capture blocked:', { 
+        hasVideo: !!videoRef.current, 
+        hasCanvas: !!canvasRef.current, 
+        isCapturing 
+      })
+      return
+    }
 
     const video = videoRef.current
     const canvas = canvasRef.current
     
     // Check if video is ready and has valid dimensions
     if (!video.videoWidth || !video.videoHeight) {
-      console.error('Video not ready for capture')
+      console.error('Video not ready for capture:', {
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        readyState: video.readyState,
+        paused: video.paused,
+        ended: video.ended
+      })
       alert('Camera is not ready. Please wait a moment and try again.')
       return
     }
+
+    console.log('Starting photo capture:', {
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      shotCount
+    })
 
     setIsCapturing(true)
     const shots = []
@@ -230,35 +249,44 @@ export default function Camera() {
     // Determine delay based on shot count: 2 shots = 2 seconds, 3 shots = 3 seconds
     const delayBetweenShots = shotCount === 2 ? 2000 : shotCount === 3 ? 3000 : 0
 
-    for (let i = 0; i < shotCount; i++) {
-      // Capture immediately for first shot, then wait for subsequent shots
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, delayBetweenShots))
-        // Re-check video dimensions after delay
-        if (!video.videoWidth || !video.videoHeight) {
-          console.error('Video lost during capture')
-          break
+    try {
+      for (let i = 0; i < shotCount; i++) {
+        // Capture immediately for first shot, then wait for subsequent shots
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, delayBetweenShots))
+          // Re-check video dimensions after delay
+          if (!video.videoWidth || !video.videoHeight) {
+            console.error('Video lost during capture')
+            break
+          }
+        }
+        
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        context.drawImage(video, 0, 0)
+
+        const blob = await new Promise((resolve) => {
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              console.error('Failed to create blob from canvas')
+            }
+            resolve(blob)
+          }, 'image/jpeg', 0.95)
+        })
+
+        if (blob) {
+          const url = URL.createObjectURL(blob)
+          shots.push({
+            type: 'photo',
+            url: url,
+            blob: blob,
+            timestamp: new Date().toISOString()
+          })
+          console.log(`Photo ${i + 1} captured successfully`)
+        } else {
+          console.error(`Failed to capture photo ${i + 1}`)
         }
       }
-      
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      context.drawImage(video, 0, 0)
-
-      const blob = await new Promise((resolve) => {
-        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.95)
-      })
-
-      if (blob) {
-        const url = URL.createObjectURL(blob)
-        shots.push({
-          type: 'photo',
-          url: url,
-          blob: blob,
-          timestamp: new Date().toISOString()
-        })
-      }
-    }
 
     setCapturedShots(shots)
     if (shots.length > 0) {
@@ -288,7 +316,17 @@ export default function Camera() {
   }
 
   const startRecording = () => {
-    if (!stream) return
+    if (!stream) {
+      console.error('Cannot start recording: no stream available')
+      alert('Camera stream is not available. Please ensure the camera is enabled.')
+      return
+    }
+
+    console.log('Starting video recording:', {
+      streamActive: stream.active,
+      tracks: stream.getTracks().length,
+      videoSpeed
+    })
 
     chunksRef.current = []
     
@@ -307,12 +345,20 @@ export default function Camera() {
       mediaRecorder = new MediaRecorder(stream, options)
       // Store the actual mime type used by the recorder
       recordedMimeType = mediaRecorder.mimeType || recordedMimeType
+      console.log('MediaRecorder created:', {
+        mimeType: recordedMimeType,
+        state: mediaRecorder.state
+      })
     } catch (error) {
       console.error('Error creating MediaRecorder:', error)
       // Try without mime type specification
       try {
         mediaRecorder = new MediaRecorder(stream)
         recordedMimeType = mediaRecorder.mimeType || 'video/webm'
+        console.log('MediaRecorder created (fallback):', {
+          mimeType: recordedMimeType,
+          state: mediaRecorder.state
+        })
       } catch (fallbackError) {
         console.error('Error creating MediaRecorder (fallback):', fallbackError)
         alert('Unable to start video recording. Your browser may not support video recording.')
@@ -323,14 +369,20 @@ export default function Camera() {
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         chunksRef.current.push(event.data)
+        console.log('Recording data available:', event.data.size, 'bytes')
       }
     }
 
     mediaRecorder.onstop = () => {
+      console.log('Recording stopped, chunks:', chunksRef.current.length)
       // Use the actual mime type from the recorder, or fallback
       const blobType = recordedMimeType.split(';')[0] || 'video/webm'
       const blob = new Blob(chunksRef.current, { type: blobType })
       const url = URL.createObjectURL(blob)
+      console.log('Video blob created:', {
+        size: blob.size,
+        type: blob.type
+      })
       setCapturedMedia({
         type: 'video',
         url: url,
@@ -341,9 +393,21 @@ export default function Camera() {
       })
     }
 
-    mediaRecorder.start()
-    mediaRecorderRef.current = mediaRecorder
-    setIsRecording(true)
+    mediaRecorder.onerror = (event) => {
+      console.error('MediaRecorder error:', event)
+      alert('An error occurred during recording. Please try again.')
+      setIsRecording(false)
+    }
+
+    try {
+      mediaRecorder.start()
+      mediaRecorderRef.current = mediaRecorder
+      setIsRecording(true)
+      console.log('Recording started successfully')
+    } catch (error) {
+      console.error('Error starting MediaRecorder:', error)
+      alert('Failed to start recording. Please try again.')
+    }
   }
 
   const stopRecording = () => {
