@@ -2,6 +2,9 @@
   "name": "360-camera",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
