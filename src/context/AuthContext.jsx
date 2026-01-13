@@ -35,8 +35,8 @@ export function AuthProvider({ children }) {
       } catch (importError) {
         // If auth.js doesn't exist (e.g., in Vercel build), use default fallback
         ADMIN_CREDENTIALS = {
-          username: 'Sal@sb',
-          password: 'sal@SB'
+          username: 'sal@sb',
+          password: 'Sal@SB'
         }
       }
       
