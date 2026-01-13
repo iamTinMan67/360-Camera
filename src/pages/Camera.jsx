@@ -26,6 +26,7 @@ export default function Camera() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadedLinks, setUploadedLinks] = useState([])
   const [copiedLink, setCopiedLink] = useState(null)
+  const [videoReady, setVideoReady] = useState(false)
   
   const { currentEvent, addMediaToEvent } = useEvents()
 
@@ -185,28 +186,83 @@ export default function Camera() {
     }
   }, [stream])
 
-  // Ensure video plays when stream is set (important for Safari)
+  // Ensure video plays when stream is set and check when it's ready (important for Safari)
   useEffect(() => {
     if (stream && videoRef.current && videoRef.current.srcObject) {
       const video = videoRef.current
+      setVideoReady(false) // Reset ready state when stream changes
+      
       const playVideo = async () => {
         try {
           await video.play()
+          console.log('Video play initiated')
         } catch (error) {
           console.warn('Video play error:', error)
         }
       }
       playVideo()
       
-      // Also handle when video is ready
-      const handleLoadedMetadata = () => {
-        video.play().catch(err => console.warn('Video play on metadata loaded failed:', err))
+      // Check if video is ready
+      const checkVideoReady = () => {
+        if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
+          console.log('Video is ready:', {
+            width: video.videoWidth,
+            height: video.videoHeight,
+            readyState: video.readyState
+          })
+          setVideoReady(true)
+        } else {
+          console.log('Video not ready yet:', {
+            width: video.videoWidth,
+            height: video.videoHeight,
+            readyState: video.readyState
+          })
+          setVideoReady(false)
+        }
       }
+      
+      // Check immediately
+      checkVideoReady()
+      
+      // Also handle when video metadata is loaded
+      const handleLoadedMetadata = () => {
+        console.log('Video metadata loaded')
+        video.play().catch(err => console.warn('Video play on metadata loaded failed:', err))
+        checkVideoReady()
+      }
+      
+      // Handle when video starts playing
+      const handlePlaying = () => {
+        console.log('Video is playing')
+        checkVideoReady()
+      }
+      
+      // Handle when video dimensions change
+      const handleResize = () => {
+        console.log('Video dimensions changed')
+        checkVideoReady()
+      }
+      
       video.addEventListener('loadedmetadata', handleLoadedMetadata)
+      video.addEventListener('playing', handlePlaying)
+      video.addEventListener('resize', handleResize)
+      
+      // Periodic check as fallback
+      const readyCheckInterval = setInterval(() => {
+        checkVideoReady()
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          clearInterval(readyCheckInterval)
+        }
+      }, 100)
       
       return () => {
         video.removeEventListener('loadedmetadata', handleLoadedMetadata)
+        video.removeEventListener('playing', handlePlaying)
+        video.removeEventListener('resize', handleResize)
+        clearInterval(readyCheckInterval)
       }
+    } else {
+      setVideoReady(false)
     }
   }, [stream])
 
@@ -661,6 +717,18 @@ export default function Camera() {
                       videoRef.current.play().catch(err => {
                         console.warn('Video autoplay failed:', err)
                       })
+                      // Check if ready after metadata loads
+                      setTimeout(() => {
+                        if (videoRef.current && videoRef.current.videoWidth > 0) {
+                          setVideoReady(true)
+                        }
+                      }, 100)
+                    }
+                  }}
+                  onPlaying={() => {
+                    // Video started playing, check if ready
+                    if (videoRef.current && videoRef.current.videoWidth > 0) {
+                      setVideoReady(true)
                     }
                   }}
                   onError={(e) => {
@@ -777,8 +845,8 @@ export default function Camera() {
                   <button 
                     onClick={capturePhoto} 
                     className="btn-primary" 
-                    disabled={!!capturedMedia || isCapturing || !videoRef.current?.videoWidth}
-                    title={!videoRef.current?.videoWidth ? 'Waiting for camera to be ready...' : ''}
+                    disabled={!!capturedMedia || isCapturing || !videoReady}
+                    title={!videoReady ? 'Waiting for camera to be ready...' : ''}
                   >
                     <CameraIcon className="inline-block mr-2 h-5 w-5" />
                     {isCapturing ? `Capturing ${capturedShots.length + 1}/${shotCount}...` : `Take ${shotCount} Photo${shotCount > 1 ? 's' : ''}`}
@@ -789,8 +857,8 @@ export default function Camera() {
                       <button 
                         onClick={startRecording} 
                         className="btn-primary" 
-                        disabled={!!capturedMedia || !videoRef.current?.videoWidth}
-                        title={!videoRef.current?.videoWidth ? 'Waiting for camera to be ready...' : ''}
+                        disabled={!!capturedMedia || !videoReady}
+                        title={!videoReady ? 'Waiting for camera to be ready...' : ''}
                       >
                         <Video className="inline-block mr-2 h-5 w-5" />
                         Record Video
