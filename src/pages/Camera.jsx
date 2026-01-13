@@ -96,6 +96,22 @@ export default function Camera() {
           'Your camera may not support the requested resolution'
         ]
       }
+    } else if (error.message && error.message.toLowerCase().includes('videoinput')) {
+      return {
+        title: 'Camera Hardware Error',
+        message: 'The camera hardware could not be initialized. This may be a hardware or driver issue.',
+        steps: [
+          'Close all other applications using the camera',
+          'Unplug and reconnect your camera if it\'s external',
+          'Restart your browser completely',
+          'Restart your computer if the issue persists',
+          'Check if your camera works in other applications (like the camera app)',
+          'On Windows: Device Manager > Cameras - check for driver issues',
+          'On Mac: System Settings > Privacy & Security > Camera - ensure browser has permission',
+          'Try a different browser to see if it\'s browser-specific',
+          'If on mobile, ensure no other apps are using the camera'
+        ]
+      }
     } else {
       return {
         title: 'Camera Access Error',
@@ -104,7 +120,9 @@ export default function Camera() {
           'Make sure you\'re using a modern browser (Chrome, Firefox, Edge, Safari)',
           'Check if your browser supports camera access',
           'Try refreshing the page',
-          'Ensure you\'re using HTTPS (or localhost for development)'
+          'Ensure you\'re using HTTPS (or localhost for development)',
+          'Close other applications that might be using the camera',
+          'Try restarting your browser'
         ]
       }
     }
@@ -130,6 +148,7 @@ export default function Camera() {
       }
 
       // Try with ideal constraints first, then fallback to basic constraints
+      // Add more fallback options including video-only (no audio)
       const tryConstraints = [
         {
           video: {
@@ -156,30 +175,70 @@ export default function Camera() {
         {
           video: true,
           audio: true
+        },
+        {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: false
+        },
+        {
+          video: {
+            facingMode: facingMode
+          },
+          audio: false
+        },
+        {
+          video: true,
+          audio: false
         }
       ]
 
       let mediaStream = null
       let lastError = null
 
+      // Try to enumerate devices first to see what's available
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoDevices = devices.filter(device => device.kind === 'videoinput')
+        console.log('🎥 CAMERA DEBUG: Available video devices:', videoDevices.length)
+        videoDevices.forEach((device, index) => {
+          console.log(`🎥 CAMERA DEBUG: Device ${index + 1}:`, {
+            label: device.label || 'Unknown',
+            deviceId: device.deviceId.substring(0, 20) + '...'
+          })
+        })
+      } catch (enumError) {
+        console.warn('⚠️ CAMERA DEBUG: Could not enumerate devices:', enumError)
+      }
+
+      // Wait a moment before trying to access camera (sometimes helps with hardware initialization)
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       // Try each constraint set until one works
       for (let i = 0; i < tryConstraints.length; i++) {
         try {
-          console.log(`Trying camera constraints (attempt ${i + 1}/${tryConstraints.length}):`, tryConstraints[i])
+          console.log(`🎥 CAMERA DEBUG: Trying camera constraints (attempt ${i + 1}/${tryConstraints.length}):`, tryConstraints[i])
           mediaStream = await navigator.mediaDevices.getUserMedia(tryConstraints[i])
-          console.log('Camera access successful with constraints:', tryConstraints[i])
+          console.log('✅ CAMERA DEBUG: Camera access successful with constraints:', tryConstraints[i])
           break
         } catch (error) {
-          console.warn(`Camera constraint attempt ${i + 1} failed:`, error.name, error.message)
+          console.warn(`⚠️ CAMERA DEBUG: Camera constraint attempt ${i + 1} failed:`, {
+            name: error.name,
+            message: error.message,
+            constraint: tryConstraints[i]
+          })
           lastError = error
           // If it's a permission error, don't try other constraints
           if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
             throw error
           }
-          // If it's NotReadableError and we have more attempts, continue
+          // If it's NotReadableError or videoinput error and we have more attempts, continue
           if (i < tryConstraints.length - 1) {
-            // Wait a bit before trying next constraint
-            await new Promise(resolve => setTimeout(resolve, 200))
+            // Wait a bit longer before trying next constraint (gives hardware time to reset)
+            await new Promise(resolve => setTimeout(resolve, 300))
             continue
           }
         }
