@@ -17,8 +17,18 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      // Import credentials and verify
-      const { ADMIN_CREDENTIALS } = await import('../config/auth.js')
+      // Try to import auth.js, fallback to environment variables or example file
+      let ADMIN_CREDENTIALS
+      try {
+        const authModule = await import('../config/auth.js')
+        ADMIN_CREDENTIALS = authModule.ADMIN_CREDENTIALS
+      } catch (importError) {
+        // If auth.js doesn't exist, use environment variables or fallback to example
+        ADMIN_CREDENTIALS = {
+          username: import.meta.env.VITE_ADMIN_USERNAME || 'Sal@sb',
+          password: import.meta.env.VITE_ADMIN_PASSWORD || 'sal@SB'
+        }
+      }
       
       if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
         const success = await login(username, password)
