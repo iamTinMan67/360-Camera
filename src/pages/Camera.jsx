@@ -129,6 +129,12 @@ export default function Camera() {
       setCameraError(null)
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream
+        // Explicitly play the video, especially important for Safari
+        try {
+          await videoRef.current.play()
+        } catch (playError) {
+          console.warn('Video autoplay failed, user interaction may be required:', playError)
+        }
       }
     } catch (error) {
       console.error('Error accessing camera:', error)
@@ -179,13 +185,46 @@ export default function Camera() {
     }
   }, [stream])
 
+  // Ensure video plays when stream is set (important for Safari)
+  useEffect(() => {
+    if (stream && videoRef.current && videoRef.current.srcObject) {
+      const video = videoRef.current
+      const playVideo = async () => {
+        try {
+          await video.play()
+        } catch (error) {
+          console.warn('Video play error:', error)
+        }
+      }
+      playVideo()
+      
+      // Also handle when video is ready
+      const handleLoadedMetadata = () => {
+        video.play().catch(err => console.warn('Video play on metadata loaded failed:', err))
+      }
+      video.addEventListener('loadedmetadata', handleLoadedMetadata)
+      
+      return () => {
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      }
+    }
+  }, [stream])
+
   const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current || isCapturing) return
 
-    setIsCapturing(true)
-    const shots = []
     const video = videoRef.current
     const canvas = canvasRef.current
+    
+    // Check if video is ready and has valid dimensions
+    if (!video.videoWidth || !video.videoHeight) {
+      console.error('Video not ready for capture')
+      alert('Camera is not ready. Please wait a moment and try again.')
+      return
+    }
+
+    setIsCapturing(true)
+    const shots = []
     const context = canvas.getContext('2d')
 
     // Determine delay based on shot count: 2 shots = 2 seconds, 3 shots = 3 seconds
@@ -195,6 +234,11 @@ export default function Camera() {
       // Capture immediately for first shot, then wait for subsequent shots
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, delayBetweenShots))
+        // Re-check video dimensions after delay
+        if (!video.videoWidth || !video.videoHeight) {
+          console.error('Video lost during capture')
+          break
+        }
       }
       
       canvas.width = video.videoWidth
@@ -538,6 +582,26 @@ export default function Camera() {
                   playsInline
                   muted
                   className="w-full h-full object-cover"
+                  onLoadedMetadata={() => {
+                    // Ensure video plays when metadata is loaded (Safari)
+                    if (videoRef.current) {
+                      videoRef.current.play().catch(err => {
+                        console.warn('Video autoplay failed:', err)
+                      })
+                    }
+                  }}
+                  onError={(e) => {
+                    console.error('Video element error:', e)
+                    setCameraError({
+                      title: 'Video Playback Error',
+                      message: 'The camera stream could not be displayed.',
+                      steps: [
+                        'Try refreshing the page',
+                        'Check if another application is using the camera',
+                        'Ensure your browser supports video playback'
+                      ]
+                    })
+                  }}
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 {capturedMedia && (
@@ -633,14 +697,15 @@ export default function Camera() {
               </div>
             ) : stream ? (
               <>
-                <button onClick={toggleFacingMode} className="btn-secondary">
+                <button onClick={toggleFacingMode} className="btn-secondary" disabled={isCapturing || isRecording || isUploading}>
                   Switch Camera
                 </button>
                 {mode === 'photo' ? (
                   <button 
                     onClick={capturePhoto} 
                     className="btn-primary" 
-                    disabled={!!capturedMedia || isCapturing}
+                    disabled={!!capturedMedia || isCapturing || !videoRef.current?.videoWidth}
+                    title={!videoRef.current?.videoWidth ? 'Waiting for camera to be ready...' : ''}
                   >
                     <CameraIcon className="inline-block mr-2 h-5 w-5" />
                     {isCapturing ? `Capturing ${capturedShots.length + 1}/${shotCount}...` : `Take ${shotCount} Photo${shotCount > 1 ? 's' : ''}`}
@@ -648,7 +713,12 @@ export default function Camera() {
                 ) : (
                   <>
                     {!isRecording ? (
-                      <button onClick={startRecording} className="btn-primary" disabled={!!capturedMedia}>
+                      <button 
+                        onClick={startRecording} 
+                        className="btn-primary" 
+                        disabled={!!capturedMedia || !videoRef.current?.videoWidth}
+                        title={!videoRef.current?.videoWidth ? 'Waiting for camera to be ready...' : ''}
+                      >
                         <Video className="inline-block mr-2 h-5 w-5" />
                         Record Video
                       </button>
