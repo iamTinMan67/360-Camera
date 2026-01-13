@@ -1333,16 +1333,22 @@ export default function Camera() {
                       }
                     })
                     
-                    // Try to load the video (forces it to process the stream)
-                    try {
-                      video.load()
-                      console.log('🎥 CAMERA DEBUG: video.load() called')
-                    } catch (e) {
-                      console.warn('⚠️ CAMERA DEBUG: video.load() failed:', e)
-                    }
+                    // Ensure video is visible (required for some browsers on HTTPS)
+                    video.style.display = 'block'
+                    video.style.visibility = 'visible'
+                    video.style.opacity = '1'
                     
-                    // Wait a moment for load to process
-                    await new Promise(resolve => setTimeout(resolve, 200))
+                    // Wait a moment for the stream to be fully attached
+                    await new Promise(resolve => setTimeout(resolve, 300))
+                    
+                    // Check if video has srcObject after wait
+                    console.log('🎥 CAMERA DEBUG: Video state before play:', {
+                      srcObject: !!video.srcObject,
+                      paused: video.paused,
+                      readyState: video.readyState,
+                      videoWidth: video.videoWidth,
+                      videoHeight: video.videoHeight
+                    })
                     
                     // Now try to play
                     try {
