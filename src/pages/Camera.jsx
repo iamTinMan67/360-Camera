@@ -316,44 +316,56 @@ export default function Camera() {
         await new Promise(resolve => setTimeout(resolve, 200))
         
         // Explicitly play the video, especially important for Safari
-        try {
-          await video.play()
-          console.log('🎥 CAMERA DEBUG: Video play() successful')
-          
-          // Check if ready immediately after play
-          setTimeout(() => {
-            const checkReady = () => {
-              console.log('🎥 CAMERA DEBUG: Checking video readiness:', {
-                videoWidth: video.videoWidth,
-                videoHeight: video.videoHeight,
-                readyState: video.readyState,
-                paused: video.paused,
-                currentTime: video.currentTime
-              })
-              
-              if (video.videoWidth > 0 && video.videoHeight > 0) {
-                console.log('✅ CAMERA DEBUG: Video ready! Dimensions:', {
-                  width: video.videoWidth,
-                  height: video.videoHeight
+        // Check if stream is still active before playing
+        const activeTracks = mediaStream.getTracks().filter(t => t.readyState === 'live')
+        if (activeTracks.length === 0) {
+          console.warn('⚠️ CAMERA DEBUG: No active tracks in stream, cannot play video')
+        } else {
+          try {
+            await video.play()
+            console.log('🎥 CAMERA DEBUG: Video play() successful')
+            
+            // Check if ready immediately after play
+            setTimeout(() => {
+              const checkReady = () => {
+                console.log('🎥 CAMERA DEBUG: Checking video readiness:', {
+                  videoWidth: video.videoWidth,
+                  videoHeight: video.videoHeight,
+                  readyState: video.readyState,
+                  paused: video.paused,
+                  currentTime: video.currentTime
                 })
-                setVideoReady(true)
-              } else {
-                console.warn('⚠️ CAMERA DEBUG: Video not ready yet, will keep checking...')
-                // Keep checking every 200ms for up to 3 seconds
-                setTimeout(() => {
-                  if (video.videoWidth > 0 && video.videoHeight > 0) {
-                    console.log('✅ CAMERA DEBUG: Video ready after delay!')
-                    setVideoReady(true)
-                  } else {
-                    console.warn('⚠️ CAMERA DEBUG: Video still not ready after delay')
-                  }
-                }, 200)
+                
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                  console.log('✅ CAMERA DEBUG: Video ready! Dimensions:', {
+                    width: video.videoWidth,
+                    height: video.videoHeight
+                  })
+                  setVideoReady(true)
+                } else {
+                  console.warn('⚠️ CAMERA DEBUG: Video not ready yet, will keep checking...')
+                  // Keep checking every 200ms for up to 3 seconds
+                  setTimeout(() => {
+                    if (video.videoWidth > 0 && video.videoHeight > 0) {
+                      console.log('✅ CAMERA DEBUG: Video ready after delay!')
+                      setVideoReady(true)
+                    } else {
+                      console.warn('⚠️ CAMERA DEBUG: Video still not ready after delay')
+                    }
+                  }, 200)
+                }
               }
+              checkReady()
+            }, 100)
+          } catch (playError) {
+            if (playError.name === 'AbortError' || playError.message?.includes('aborted')) {
+              console.warn('⚠️ CAMERA DEBUG: Video play aborted (may be autoplay policy or element replaced)')
+              // The useEffect will handle retrying when the element is ready
+            } else {
+              console.error('❌ CAMERA DEBUG: Video autoplay failed:', playError)
             }
-            checkReady()
-          }, 100)
-        } catch (playError) {
-          console.error('❌ CAMERA DEBUG: Video autoplay failed:', playError)
+          }
+        }
         }
       } else {
         console.warn('⚠️ CAMERA DEBUG: videoRef.current is still null after waiting, but stream is set. useEffect should handle it.')
@@ -431,11 +443,35 @@ export default function Camera() {
       console.log('🎥 CAMERA DEBUG: Setting up video readiness detection')
       
       const playVideo = async () => {
+        // Check if stream is still active before trying to play
+        if (!stream || stream.getTracks().length === 0) {
+          console.warn('⚠️ CAMERA DEBUG: Stream not available, skipping play')
+          return
+        }
+        
+        const activeTracks = stream.getTracks().filter(t => t.readyState === 'live')
+        if (activeTracks.length === 0) {
+          console.warn('⚠️ CAMERA DEBUG: No active tracks, skipping play')
+          return
+        }
+        
+        // Check if video element is still valid
+        if (!videoRef.current || videoRef.current.srcObject !== stream) {
+          console.warn('⚠️ CAMERA DEBUG: Video element not valid, skipping play')
+          return
+        }
+        
         try {
           await video.play()
           console.log('🎥 CAMERA DEBUG: Video play initiated in useEffect')
         } catch (error) {
-          console.warn('⚠️ CAMERA DEBUG: Video play error in useEffect:', error)
+          // Handle specific error types
+          if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+            console.warn('⚠️ CAMERA DEBUG: Video play aborted by browser (may be autoplay policy or element replaced)')
+            // Don't set error, just log - the video might still work
+          } else {
+            console.warn('⚠️ CAMERA DEBUG: Video play error in useEffect:', error)
+          }
         }
       }
       playVideo()
@@ -469,8 +505,17 @@ export default function Camera() {
       
       // Also handle when video metadata is loaded
       const handleLoadedMetadata = () => {
-        console.log('Video metadata loaded')
-        video.play().catch(err => console.warn('Video play on metadata loaded failed:', err))
+        console.log('🎥 CAMERA DEBUG: Video metadata loaded')
+        // Check if stream is still active before playing
+        if (stream && stream.getTracks().some(t => t.readyState === 'live')) {
+          video.play().catch(err => {
+            if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+              console.warn('⚠️ CAMERA DEBUG: Video play aborted in handleLoadedMetadata (may be autoplay policy)')
+            } else {
+              console.warn('⚠️ CAMERA DEBUG: Video play on metadata loaded failed:', err)
+            }
+          })
+        }
         checkVideoReady()
       }
       
@@ -490,20 +535,40 @@ export default function Camera() {
       video.addEventListener('playing', handlePlaying)
       video.addEventListener('resize', handleResize)
       
-      // Periodic check as fallback - run for up to 5 seconds
+      // Periodic check as fallback - run for up to 10 seconds
       let checkCount = 0
-      const maxChecks = 50 // 5 seconds at 100ms intervals
+      const maxChecks = 100 // 10 seconds at 100ms intervals
       const readyCheckInterval = setInterval(() => {
+        // Check if video element and stream are still valid
+        if (!videoRef.current || !stream || !videoRef.current.srcObject) {
+          console.warn('⚠️ CAMERA DEBUG: Video element or stream no longer valid, stopping checks')
+          clearInterval(readyCheckInterval)
+          return
+        }
+        
+        // Check if stream tracks are still active
+        const activeTracks = stream.getTracks().filter(t => t.readyState === 'live')
+        if (activeTracks.length === 0) {
+          console.warn('⚠️ CAMERA DEBUG: No active tracks in stream, stopping checks')
+          clearInterval(readyCheckInterval)
+          return
+        }
+        
         checkVideoReady()
         checkCount++
         if (video.videoWidth > 0 && video.videoHeight > 0) {
+          console.log('✅ CAMERA DEBUG: Video ready detected in periodic check')
           clearInterval(readyCheckInterval)
         } else if (checkCount >= maxChecks) {
-          // After 5 seconds, if still not ready, log warning but don't block
-          console.warn('Video not ready after 5 seconds, but enabling buttons anyway')
-          if (video.readyState > 0) {
-            setVideoReady(true)
-          }
+          // After 10 seconds, if still not ready, log warning
+          console.warn('⚠️ CAMERA DEBUG: Video not ready after 10 seconds')
+          console.warn('⚠️ CAMERA DEBUG: Video state:', {
+            width: video.videoWidth,
+            height: video.videoHeight,
+            readyState: video.readyState,
+            paused: video.paused,
+            error: video.error?.message
+          })
           clearInterval(readyCheckInterval)
         }
       }, 100)
