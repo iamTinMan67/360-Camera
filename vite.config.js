@@ -8,7 +8,8 @@ export default defineConfig({
     open: true
   },
   build: {
-    outDir: 'dist',
-    assetsDir: 'assets'
+    rollupOptions: {
+      input: './index.html'
+    }
   }
 })
