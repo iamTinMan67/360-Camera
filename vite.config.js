@@ -9,6 +9,7 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    minify: 'esbuild'
+    minify: 'esbuild',
+    sourcemap: false // Disable source maps to avoid parsing errors
   }
 })
