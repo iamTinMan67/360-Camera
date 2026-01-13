@@ -281,6 +281,7 @@ export default function Camera() {
 
       setStream(mediaStream)
       setCameraError(null)
+      setIsLoading(false) // Clear loading state immediately when stream is obtained
       
       console.log('🎥 CAMERA DEBUG: Stream obtained, setting to video element')
       console.log('🎥 CAMERA DEBUG: Stream tracks:', mediaStream.getTracks().map(t => ({
@@ -427,6 +428,11 @@ export default function Camera() {
   // Ensure video plays when stream is set and check when it's ready (important for Safari)
   useEffect(() => {
     console.log('🎥 CAMERA DEBUG: useEffect triggered, stream:', !!stream, 'videoRef:', !!videoRef.current)
+    
+    // Clear loading state when stream is available
+    if (stream) {
+      setIsLoading(false)
+    }
     
     if (stream && videoRef.current) {
       const video = videoRef.current
@@ -1291,12 +1297,12 @@ export default function Camera() {
 
           {/* Controls */}
           <div className="flex flex-wrap justify-center gap-4">
-            {isLoading ? (
+            {isLoading && !stream ? (
               <div className="flex items-center space-x-2 text-purple-600">
                 <RefreshCw className="h-5 w-5 animate-spin" />
                 <span>Starting camera...</span>
               </div>
-            ) : stream && videoRef.current && videoRef.current.paused ? (
+            ) : stream && videoRef.current && videoRef.current.paused && !videoReady ? (
               <button
                 onClick={async () => {
                   if (videoRef.current) {
