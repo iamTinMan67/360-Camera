@@ -1176,7 +1176,8 @@ export default function Camera() {
                   </button>
                 </div>
               </div>
-            ) : (
+            )}
+            {!stream && !cameraError && (
               <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6">
                 {isLoading ? (
                   <>
