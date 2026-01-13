@@ -366,7 +366,6 @@ export default function Camera() {
             }
           }
         }
-        }
       } else {
         console.warn('⚠️ CAMERA DEBUG: videoRef.current is still null after waiting, but stream is set. useEffect should handle it.')
         // The useEffect hook will handle setting the video element when it becomes available
