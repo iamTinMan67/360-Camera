@@ -259,6 +259,15 @@ export default function Camera() {
         readyState: t.readyState
       })))
       
+      // Wait for video element to be available (it might not be mounted yet)
+      let retries = 0
+      const maxRetries = 10
+      while (!videoRef.current && retries < maxRetries) {
+        console.log(`🎥 CAMERA DEBUG: Waiting for video element... (attempt ${retries + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, 100))
+        retries++
+      }
+      
       if (videoRef.current) {
         const video = videoRef.current
         video.srcObject = mediaStream
@@ -316,7 +325,8 @@ export default function Camera() {
           console.error('❌ CAMERA DEBUG: Video autoplay failed:', playError)
         }
       } else {
-        console.error('❌ CAMERA DEBUG: videoRef.current is null!')
+        console.warn('⚠️ CAMERA DEBUG: videoRef.current is still null after waiting, but stream is set. useEffect should handle it.')
+        // The useEffect hook will handle setting the video element when it becomes available
       }
     } catch (error) {
       console.error('Error accessing camera:', error)
@@ -376,8 +386,15 @@ export default function Camera() {
   useEffect(() => {
     console.log('🎥 CAMERA DEBUG: useEffect triggered, stream:', !!stream, 'videoRef:', !!videoRef.current)
     
-    if (stream && videoRef.current && videoRef.current.srcObject) {
+    if (stream && videoRef.current) {
       const video = videoRef.current
+      
+      // Set srcObject if it's not already set
+      if (!video.srcObject || video.srcObject !== stream) {
+        console.log('🎥 CAMERA DEBUG: Setting srcObject in useEffect')
+        video.srcObject = stream
+      }
+      
       setVideoReady(false) // Reset ready state when stream changes
       
       console.log('🎥 CAMERA DEBUG: Setting up video readiness detection')
