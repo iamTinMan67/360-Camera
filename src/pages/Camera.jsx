@@ -1305,11 +1305,62 @@ export default function Camera() {
             ) : stream && videoRef.current && videoRef.current.paused && !videoReady ? (
               <button
                 onClick={async () => {
-                  if (videoRef.current) {
+                  if (videoRef.current && stream) {
                     console.log('🎥 CAMERA DEBUG: Manual play button clicked')
+                    const video = videoRef.current
+                    
+                    // Ensure srcObject is set
+                    if (!video.srcObject || video.srcObject !== stream) {
+                      console.log('🎥 CAMERA DEBUG: Setting srcObject in manual play')
+                      video.srcObject = stream
+                      // Wait for stream to attach
+                      await new Promise(resolve => setTimeout(resolve, 100))
+                    }
+                    
+                    // Check track states
+                    const tracks = stream.getTracks()
+                    console.log('🎥 CAMERA DEBUG: Stream tracks:', tracks.map(t => ({
+                      kind: t.kind,
+                      readyState: t.readyState,
+                      enabled: t.enabled
+                    })))
+                    
+                    // Ensure tracks are enabled
+                    tracks.forEach(track => {
+                      if (!track.enabled) {
+                        console.log(`🎥 CAMERA DEBUG: Enabling ${track.kind} track`)
+                        track.enabled = true
+                      }
+                    })
+                    
+                    // Try to load the video (forces it to process the stream)
                     try {
-                      await videoRef.current.play()
+                      video.load()
+                      console.log('🎥 CAMERA DEBUG: video.load() called')
+                    } catch (e) {
+                      console.warn('⚠️ CAMERA DEBUG: video.load() failed:', e)
+                    }
+                    
+                    // Wait a moment for load to process
+                    await new Promise(resolve => setTimeout(resolve, 200))
+                    
+                    // Now try to play
+                    try {
+                      await video.play()
                       console.log('✅ CAMERA DEBUG: Manual play successful')
+                      
+                      // Check state after play
+                      setTimeout(() => {
+                        if (videoRef.current) {
+                          console.log('🎥 CAMERA DEBUG: State after manual play:', {
+                            paused: videoRef.current.paused,
+                            readyState: videoRef.current.readyState,
+                            videoWidth: videoRef.current.videoWidth,
+                            videoHeight: videoRef.current.videoHeight,
+                            currentTime: videoRef.current.currentTime
+                          })
+                        }
+                      }, 500)
                     } catch (error) {
                       console.error('❌ CAMERA DEBUG: Manual play failed:', error)
                       alert(`Video play failed: ${error.message}. Please check browser permissions.`)
