@@ -29,39 +29,27 @@ export default function Camera() {
   
   const { currentEvent, addMediaToEvent } = useEvents()
 
-  // Auto-start camera when component mounts
-  useEffect(() => {
-    const initCamera = async () => {
-      if (!stream && !cameraError) {
-        await startCamera()
-      }
-    }
-    initCamera()
-    
-    return () => {
-      // Cleanup stream on unmount
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop())
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Only run on mount
-
-  useEffect(() => {
-    // Cleanup stream when it changes
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop())
-      }
-    }
-  }, [stream])
+  // Detect Safari browser
+  const isSafari = () => {
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || 
+           (navigator.userAgent.includes('Mac') && navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome'))
+  }
 
   const getErrorMessage = (error) => {
     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      const safariSteps = isSafari() ? [
+        'Click the "Enable Camera" button above to request permission',
+        'When prompted, click "Allow" to grant camera access',
+        'If you previously denied access, go to Safari > Preferences > Websites > Camera',
+        'Find this website and change the setting to "Allow"',
+        'Refresh the page and try again'
+      ] : []
+      
       return {
         title: 'Camera Permission Denied',
         message: 'Please allow camera access in your browser settings.',
         steps: [
+          ...safariSteps,
           'Look for the camera icon in your browser\'s address bar',
           'Click it and select "Allow" for camera and microphone',
           'Refresh the page and try again',
@@ -161,6 +149,35 @@ export default function Camera() {
     }
     setCapturedMedia(null)
   }
+
+  // Auto-start camera when component mounts (but not for Safari - requires user interaction)
+  useEffect(() => {
+    const initCamera = async () => {
+      // Safari requires user interaction to request camera permissions
+      // So we skip auto-start for Safari and show a button instead
+      if (!isSafari() && !stream && !cameraError) {
+        await startCamera()
+      }
+    }
+    initCamera()
+    
+    return () => {
+      // Cleanup stream on unmount
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount
+
+  useEffect(() => {
+    // Cleanup stream when it changes
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [stream])
 
   const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current || isCapturing) return
@@ -574,11 +591,28 @@ export default function Camera() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6">
                 {isLoading ? (
                   <>
                     <RefreshCw className="h-16 w-16 mb-4 animate-spin" />
                     <p className="text-sm">Starting camera...</p>
+                  </>
+                ) : isSafari() ? (
+                  <>
+                    <CameraIcon className="h-16 w-16 mb-4 text-purple-500" />
+                    <p className="text-sm mb-4 text-center">
+                      Safari requires permission to access your camera.
+                    </p>
+                    <p className="text-xs mb-4 text-center text-gray-500">
+                      Click the button below to enable camera access.
+                    </p>
+                    <button
+                      onClick={startCamera}
+                      className="btn-primary mt-4"
+                    >
+                      <CameraIcon className="inline-block mr-2 h-5 w-5" />
+                      Enable Camera
+                    </button>
                   </>
                 ) : (
                   <>
@@ -632,8 +666,17 @@ export default function Camera() {
                 onClick={startCamera} 
                 className="btn-primary"
               >
-                <RefreshCw className="inline-block mr-2 h-5 w-5" />
-                Retry Camera
+                {isSafari() ? (
+                  <>
+                    <CameraIcon className="inline-block mr-2 h-5 w-5" />
+                    Enable Camera
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="inline-block mr-2 h-5 w-5" />
+                    Retry Camera
+                  </>
+                )}
               </button>
             )}
 
