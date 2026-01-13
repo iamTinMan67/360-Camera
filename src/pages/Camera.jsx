@@ -434,7 +434,20 @@ export default function Camera() {
       // Set srcObject if it's not already set
       if (!video.srcObject || video.srcObject !== stream) {
         console.log('🎥 CAMERA DEBUG: Setting srcObject in useEffect')
+        console.log('🎥 CAMERA DEBUG: Stream tracks before setting:', stream.getTracks().map(t => ({
+          kind: t.kind,
+          readyState: t.readyState,
+          enabled: t.enabled,
+          muted: t.muted
+        })))
         video.srcObject = stream
+        console.log('🎥 CAMERA DEBUG: srcObject set, video state:', {
+          srcObject: !!video.srcObject,
+          readyState: video.readyState,
+          paused: video.paused
+        })
+      } else {
+        console.log('🎥 CAMERA DEBUG: srcObject already set correctly')
       }
       
       setVideoReady(false) // Reset ready state when stream changes
@@ -1061,7 +1074,18 @@ export default function Camera() {
               </>
             )}
             {stream && (
-              <div>Tracks: {stream.getTracks().length} ({stream.getTracks().map(t => t.kind).join(', ')})</div>
+              <>
+                <div>Tracks: {stream.getTracks().length} ({stream.getTracks().map(t => t.kind).join(', ')})</div>
+                <div>Active Tracks: {stream.getTracks().filter(t => t.readyState === 'live').length}</div>
+                <div>Track States: {stream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(', ')}</div>
+                {videoRef.current && (
+                  <>
+                    <div>Video srcObject matches stream: {videoRef.current.srcObject === stream ? 'Yes' : 'No'}</div>
+                    <div>Video autoplay: {videoRef.current.autoplay ? 'Yes' : 'No'}</div>
+                    <div>Video muted: {videoRef.current.muted ? 'Yes' : 'No'}</div>
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
