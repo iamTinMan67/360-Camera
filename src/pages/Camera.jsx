@@ -191,29 +191,73 @@ export default function Camera() {
 
       setStream(mediaStream)
       setCameraError(null)
+      
+      console.log('🎥 CAMERA DEBUG: Stream obtained, setting to video element')
+      console.log('🎥 CAMERA DEBUG: Stream tracks:', mediaStream.getTracks().map(t => ({
+        kind: t.kind,
+        label: t.label,
+        enabled: t.enabled,
+        readyState: t.readyState
+      })))
+      
       if (videoRef.current) {
         const video = videoRef.current
         video.srcObject = mediaStream
         
+        console.log('🎥 CAMERA DEBUG: Video element srcObject set')
+        console.log('🎥 CAMERA DEBUG: Video element state:', {
+          srcObject: !!video.srcObject,
+          paused: video.paused,
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight
+        })
+        
         // Wait a moment for the stream to attach
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 200))
         
         // Explicitly play the video, especially important for Safari
         try {
           await video.play()
-          console.log('Video play successful in startCamera')
+          console.log('🎥 CAMERA DEBUG: Video play() successful')
           
           // Check if ready immediately after play
-          if (video.videoWidth > 0 && video.videoHeight > 0) {
-            console.log('Video ready immediately:', {
-              width: video.videoWidth,
-              height: video.videoHeight
-            })
-            setVideoReady(true)
-          }
+          setTimeout(() => {
+            const checkReady = () => {
+              console.log('🎥 CAMERA DEBUG: Checking video readiness:', {
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                readyState: video.readyState,
+                paused: video.paused,
+                currentTime: video.currentTime
+              })
+              
+              if (video.videoWidth > 0 && video.videoHeight > 0) {
+                console.log('✅ CAMERA DEBUG: Video ready! Dimensions:', {
+                  width: video.videoWidth,
+                  height: video.videoHeight
+                })
+                setVideoReady(true)
+              } else {
+                console.warn('⚠️ CAMERA DEBUG: Video not ready yet, will keep checking...')
+                // Keep checking every 200ms for up to 3 seconds
+                setTimeout(() => {
+                  if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    console.log('✅ CAMERA DEBUG: Video ready after delay!')
+                    setVideoReady(true)
+                  } else {
+                    console.warn('⚠️ CAMERA DEBUG: Video still not ready after delay')
+                  }
+                }, 200)
+              }
+            }
+            checkReady()
+          }, 100)
         } catch (playError) {
-          console.warn('Video autoplay failed, user interaction may be required:', playError)
+          console.error('❌ CAMERA DEBUG: Video autoplay failed:', playError)
         }
+      } else {
+        console.error('❌ CAMERA DEBUG: videoRef.current is null!')
       }
     } catch (error) {
       console.error('Error accessing camera:', error)
@@ -271,16 +315,20 @@ export default function Camera() {
 
   // Ensure video plays when stream is set and check when it's ready (important for Safari)
   useEffect(() => {
+    console.log('🎥 CAMERA DEBUG: useEffect triggered, stream:', !!stream, 'videoRef:', !!videoRef.current)
+    
     if (stream && videoRef.current && videoRef.current.srcObject) {
       const video = videoRef.current
       setVideoReady(false) // Reset ready state when stream changes
       
+      console.log('🎥 CAMERA DEBUG: Setting up video readiness detection')
+      
       const playVideo = async () => {
         try {
           await video.play()
-          console.log('Video play initiated')
+          console.log('🎥 CAMERA DEBUG: Video play initiated in useEffect')
         } catch (error) {
-          console.warn('Video play error:', error)
+          console.warn('⚠️ CAMERA DEBUG: Video play error in useEffect:', error)
         }
       }
       playVideo()
@@ -290,21 +338,21 @@ export default function Camera() {
         const hasDimensions = video.videoWidth > 0 && video.videoHeight > 0
         const isReady = hasDimensions || video.readyState >= 2
         
+        console.log('🎥 CAMERA DEBUG: checkVideoReady called:', {
+          width: video.videoWidth,
+          height: video.videoHeight,
+          readyState: video.readyState,
+          hasDimensions,
+          isReady,
+          paused: video.paused,
+          currentTime: video.currentTime
+        })
+        
         if (isReady) {
-          console.log('Video is ready:', {
-            width: video.videoWidth,
-            height: video.videoHeight,
-            readyState: video.readyState,
-            hasDimensions
-          })
+          console.log('✅ CAMERA DEBUG: Video is ready!')
           setVideoReady(true)
         } else {
-          console.log('Video not ready yet:', {
-            width: video.videoWidth,
-            height: video.videoHeight,
-            readyState: video.readyState,
-            hasDimensions
-          })
+          console.log('⚠️ CAMERA DEBUG: Video not ready yet')
           setVideoReady(false)
         }
       }
@@ -797,6 +845,29 @@ export default function Camera() {
         )}
       </div>
 
+      {/* Debug Panel - Remove in production */}
+      {(process.env.NODE_ENV === 'development' || true) && (
+        <div className="card bg-gray-100 text-xs">
+          <div className="font-semibold mb-2">Camera Debug Status:</div>
+          <div className="space-y-1">
+            <div>Stream: {stream ? '✅ Active' : '❌ None'}</div>
+            <div>Video Element: {videoRef.current ? '✅ Exists' : '❌ Missing'}</div>
+            <div>Video Ready: {videoReady ? '✅ Yes' : '❌ No'}</div>
+            {videoRef.current && (
+              <>
+                <div>Video Dimensions: {videoRef.current.videoWidth}x{videoRef.current.videoHeight}</div>
+                <div>Video ReadyState: {videoRef.current.readyState}</div>
+                <div>Video Paused: {videoRef.current.paused ? 'Yes' : 'No'}</div>
+                <div>Has srcObject: {videoRef.current.srcObject ? 'Yes' : 'No'}</div>
+              </>
+            )}
+            {stream && (
+              <div>Tracks: {stream.getTracks().length} ({stream.getTracks().map(t => t.kind).join(', ')})</div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="space-y-4">
           {/* Video Preview */}
@@ -810,20 +881,22 @@ export default function Camera() {
                   muted
                   className="w-full h-full object-cover"
                   onLoadedMetadata={() => {
+                    console.log('🎥 CAMERA DEBUG: onLoadedMetadata event fired')
                     // Ensure video plays when metadata is loaded (Safari)
                     if (videoRef.current) {
                       const video = videoRef.current
                       video.play().catch(err => {
-                        console.warn('Video autoplay failed:', err)
+                        console.warn('⚠️ CAMERA DEBUG: Video autoplay failed in onLoadedMetadata:', err)
                       })
                       // Check if ready after metadata loads - try multiple times
                       const checkReady = () => {
+                        console.log('🎥 CAMERA DEBUG: onLoadedMetadata checkReady:', {
+                          width: video.videoWidth,
+                          height: video.videoHeight,
+                          readyState: video.readyState
+                        })
                         if (video.videoWidth > 0 && video.videoHeight > 0) {
-                          console.log('Video ready from onLoadedMetadata:', {
-                            width: video.videoWidth,
-                            height: video.videoHeight,
-                            readyState: video.readyState
-                          })
+                          console.log('✅ CAMERA DEBUG: Video ready from onLoadedMetadata!')
                           setVideoReady(true)
                         } else {
                           // Try again after a short delay
@@ -834,29 +907,33 @@ export default function Camera() {
                     }
                   }}
                   onPlaying={() => {
+                    console.log('🎥 CAMERA DEBUG: onPlaying event fired')
                     // Video started playing, check if ready
                     if (videoRef.current) {
                       const video = videoRef.current
+                      console.log('🎥 CAMERA DEBUG: onPlaying check:', {
+                        width: video.videoWidth,
+                        height: video.videoHeight,
+                        readyState: video.readyState
+                      })
                       if (video.videoWidth > 0 && video.videoHeight > 0) {
-                        console.log('Video ready from onPlaying:', {
-                          width: video.videoWidth,
-                          height: video.videoHeight,
-                          readyState: video.readyState
-                        })
+                        console.log('✅ CAMERA DEBUG: Video ready from onPlaying!')
                         setVideoReady(true)
                       }
                     }
                   }}
                   onLoadedData={() => {
+                    console.log('🎥 CAMERA DEBUG: onLoadedData event fired')
                     // Additional check when video data is loaded
                     if (videoRef.current) {
                       const video = videoRef.current
+                      console.log('🎥 CAMERA DEBUG: onLoadedData check:', {
+                        width: video.videoWidth,
+                        height: video.videoHeight,
+                        readyState: video.readyState
+                      })
                       if (video.videoWidth > 0 && video.videoHeight > 0) {
-                        console.log('Video ready from onLoadedData:', {
-                          width: video.videoWidth,
-                          height: video.videoHeight,
-                          readyState: video.readyState
-                        })
+                        console.log('✅ CAMERA DEBUG: Video ready from onLoadedData!')
                         setVideoReady(true)
                       }
                     }
