@@ -25,16 +25,18 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password) => {
     try {
-      // Try to import auth.js, fallback to environment variables or example file
+      // Try to import auth.js, fallback to default credentials
+      // Note: In a client-side app, credentials will be visible in the bundle
+      // For production, consider implementing server-side authentication
       let ADMIN_CREDENTIALS
       try {
         const authModule = await import('../config/auth.js')
         ADMIN_CREDENTIALS = authModule.ADMIN_CREDENTIALS
       } catch (importError) {
-        // If auth.js doesn't exist, use environment variables or fallback to example
+        // If auth.js doesn't exist (e.g., in Vercel build), use default fallback
         ADMIN_CREDENTIALS = {
-          username: import.meta.env.VITE_ADMIN_USERNAME || 'Sal@sb',
-          password: import.meta.env.VITE_ADMIN_PASSWORD || 'sal@SB'
+          username: 'Sal@sb',
+          password: 'sal@SB'
         }
       }
       
