@@ -1293,15 +1293,17 @@ export default function Camera() {
                 <RefreshCw className="h-5 w-5 animate-spin" />
                 <span>Starting camera...</span>
               </div>
-            ) : stream && !videoReady && videoRef.current && videoRef.current.paused ? (
+            ) : stream && videoRef.current && videoRef.current.paused ? (
               <button
                 onClick={async () => {
                   if (videoRef.current) {
+                    console.log('🎥 CAMERA DEBUG: Manual play button clicked')
                     try {
                       await videoRef.current.play()
                       console.log('✅ CAMERA DEBUG: Manual play successful')
                     } catch (error) {
                       console.error('❌ CAMERA DEBUG: Manual play failed:', error)
+                      alert(`Video play failed: ${error.message}. Please check browser permissions.`)
                     }
                   }
                 }}
