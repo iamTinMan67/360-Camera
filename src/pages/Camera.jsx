@@ -511,10 +511,17 @@ export default function Camera() {
         }
       }
       
-      // Wait a moment for srcObject to be set, then play
+      // Force play immediately and with delays - sometimes needed for browser autoplay policies
+      playVideo()
       setTimeout(() => {
         playVideo()
       }, 100)
+      setTimeout(() => {
+        playVideo()
+      }, 500)
+      setTimeout(() => {
+        playVideo()
+      }, 1000)
       
       // Check if video is ready (more lenient check - just need valid dimensions)
       const checkVideoReady = () => {
