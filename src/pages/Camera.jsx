@@ -129,10 +129,25 @@ export default function Camera() {
       setStream(mediaStream)
       setCameraError(null)
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
+        const video = videoRef.current
+        video.srcObject = mediaStream
+        
+        // Wait a moment for the stream to attach
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
         // Explicitly play the video, especially important for Safari
         try {
-          await videoRef.current.play()
+          await video.play()
+          console.log('Video play successful in startCamera')
+          
+          // Check if ready immediately after play
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            console.log('Video ready immediately:', {
+              width: video.videoWidth,
+              height: video.videoHeight
+            })
+            setVideoReady(true)
+          }
         } catch (playError) {
           console.warn('Video autoplay failed, user interaction may be required:', playError)
         }
@@ -202,20 +217,25 @@ export default function Camera() {
       }
       playVideo()
       
-      // Check if video is ready
+      // Check if video is ready (more lenient check - just need valid dimensions)
       const checkVideoReady = () => {
-        if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
+        const hasDimensions = video.videoWidth > 0 && video.videoHeight > 0
+        const isReady = hasDimensions || video.readyState >= 2
+        
+        if (isReady) {
           console.log('Video is ready:', {
             width: video.videoWidth,
             height: video.videoHeight,
-            readyState: video.readyState
+            readyState: video.readyState,
+            hasDimensions
           })
           setVideoReady(true)
         } else {
           console.log('Video not ready yet:', {
             width: video.videoWidth,
             height: video.videoHeight,
-            readyState: video.readyState
+            readyState: video.readyState,
+            hasDimensions
           })
           setVideoReady(false)
         }
@@ -247,10 +267,20 @@ export default function Camera() {
       video.addEventListener('playing', handlePlaying)
       video.addEventListener('resize', handleResize)
       
-      // Periodic check as fallback
+      // Periodic check as fallback - run for up to 5 seconds
+      let checkCount = 0
+      const maxChecks = 50 // 5 seconds at 100ms intervals
       const readyCheckInterval = setInterval(() => {
         checkVideoReady()
+        checkCount++
         if (video.videoWidth > 0 && video.videoHeight > 0) {
+          clearInterval(readyCheckInterval)
+        } else if (checkCount >= maxChecks) {
+          // After 5 seconds, if still not ready, log warning but don't block
+          console.warn('Video not ready after 5 seconds, but enabling buttons anyway')
+          if (video.readyState > 0) {
+            setVideoReady(true)
+          }
           clearInterval(readyCheckInterval)
         }
       }, 100)
@@ -714,21 +744,53 @@ export default function Camera() {
                   onLoadedMetadata={() => {
                     // Ensure video plays when metadata is loaded (Safari)
                     if (videoRef.current) {
-                      videoRef.current.play().catch(err => {
+                      const video = videoRef.current
+                      video.play().catch(err => {
                         console.warn('Video autoplay failed:', err)
                       })
-                      // Check if ready after metadata loads
-                      setTimeout(() => {
-                        if (videoRef.current && videoRef.current.videoWidth > 0) {
+                      // Check if ready after metadata loads - try multiple times
+                      const checkReady = () => {
+                        if (video.videoWidth > 0 && video.videoHeight > 0) {
+                          console.log('Video ready from onLoadedMetadata:', {
+                            width: video.videoWidth,
+                            height: video.videoHeight,
+                            readyState: video.readyState
+                          })
                           setVideoReady(true)
+                        } else {
+                          // Try again after a short delay
+                          setTimeout(checkReady, 50)
                         }
-                      }, 100)
+                      }
+                      setTimeout(checkReady, 50)
                     }
                   }}
                   onPlaying={() => {
                     // Video started playing, check if ready
-                    if (videoRef.current && videoRef.current.videoWidth > 0) {
-                      setVideoReady(true)
+                    if (videoRef.current) {
+                      const video = videoRef.current
+                      if (video.videoWidth > 0 && video.videoHeight > 0) {
+                        console.log('Video ready from onPlaying:', {
+                          width: video.videoWidth,
+                          height: video.videoHeight,
+                          readyState: video.readyState
+                        })
+                        setVideoReady(true)
+                      }
+                    }
+                  }}
+                  onLoadedData={() => {
+                    // Additional check when video data is loaded
+                    if (videoRef.current) {
+                      const video = videoRef.current
+                      if (video.videoWidth > 0 && video.videoHeight > 0) {
+                        console.log('Video ready from onLoadedData:', {
+                          width: video.videoWidth,
+                          height: video.videoHeight,
+                          readyState: video.readyState
+                        })
+                        setVideoReady(true)
+                      }
                     }
                   }}
                   onError={(e) => {
