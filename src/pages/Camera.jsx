@@ -73,13 +73,17 @@ export default function Camera() {
       }
     } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
       return {
-        title: 'Camera Already in Use',
-        message: 'The camera is being used by another application.',
+        title: 'Camera Cannot Start',
+        message: 'The camera could not be started. This usually means it\'s in use or there\'s a hardware issue.',
         steps: [
-          'Close other applications that might be using the camera',
-          'Close video conferencing apps (Zoom, Teams, etc.)',
-          'Close other browser tabs using the camera',
-          'Try refreshing the page'
+          'Close other applications that might be using the camera (Zoom, Teams, Skype, etc.)',
+          'Close other browser tabs that are using the camera',
+          'Try refreshing the page',
+          'If on mobile, close the camera app and try again',
+          'Restart your browser if the issue persists',
+          'Check if your camera works in other applications',
+          'On Windows: Settings > Privacy > Camera - ensure browser has permission',
+          'On Mac: System Settings > Privacy & Security > Camera - ensure browser has permission'
         ]
       }
     } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
@@ -110,22 +114,81 @@ export default function Camera() {
     setCameraError(null)
     setIsLoading(true)
     
+    // Clean up any existing stream first
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop())
+      setStream(null)
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    
     try {
       // Check if getUserMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera API not supported in this browser')
       }
 
-      const constraints = {
-        video: {
-          facingMode: facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+      // Try with ideal constraints first, then fallback to basic constraints
+      const tryConstraints = [
+        {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: true
         },
-        audio: true
+        {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: true
+        },
+        {
+          video: {
+            facingMode: facingMode
+          },
+          audio: true
+        },
+        {
+          video: true,
+          audio: true
+        }
+      ]
+
+      let mediaStream = null
+      let lastError = null
+
+      // Try each constraint set until one works
+      for (let i = 0; i < tryConstraints.length; i++) {
+        try {
+          console.log(`Trying camera constraints (attempt ${i + 1}/${tryConstraints.length}):`, tryConstraints[i])
+          mediaStream = await navigator.mediaDevices.getUserMedia(tryConstraints[i])
+          console.log('Camera access successful with constraints:', tryConstraints[i])
+          break
+        } catch (error) {
+          console.warn(`Camera constraint attempt ${i + 1} failed:`, error.name, error.message)
+          lastError = error
+          // If it's a permission error, don't try other constraints
+          if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            throw error
+          }
+          // If it's NotReadableError and we have more attempts, continue
+          if (i < tryConstraints.length - 1) {
+            // Wait a bit before trying next constraint
+            await new Promise(resolve => setTimeout(resolve, 200))
+            continue
+          }
+        }
       }
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
+      if (!mediaStream) {
+        throw lastError || new Error('Could not access camera with any constraints')
+      }
+
       setStream(mediaStream)
       setCameraError(null)
       if (videoRef.current) {
@@ -156,6 +219,11 @@ export default function Camera() {
       console.error('Error accessing camera:', error)
       const errorInfo = getErrorMessage(error)
       setCameraError(errorInfo)
+      // Ensure stream is cleaned up on error
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+        setStream(null)
+      }
     } finally {
       setIsLoading(false)
     }
