@@ -96,20 +96,38 @@ export default function Camera() {
           'Your camera may not support the requested resolution'
         ]
       }
-    } else if (error.message && error.message.toLowerCase().includes('videoinput')) {
+    } else if (error.message && (error.message.toLowerCase().includes('videoinput') || error.message.toLowerCase().includes('starting videoinput'))) {
       return {
-        title: 'Camera Hardware Error',
-        message: 'The camera hardware could not be initialized. This may be a hardware or driver issue.',
+        title: 'Camera Hardware Initialization Failed',
+        message: 'The camera hardware could not be started. All constraint attempts failed. This usually means the camera is in use or there\'s a hardware/driver issue.',
         steps: [
-          'Close all other applications using the camera',
-          'Unplug and reconnect your camera if it\'s external',
-          'Restart your browser completely',
-          'Restart your computer if the issue persists',
-          'Check if your camera works in other applications (like the camera app)',
-          'On Windows: Device Manager > Cameras - check for driver issues',
-          'On Mac: System Settings > Privacy & Security > Camera - ensure browser has permission',
-          'Try a different browser to see if it\'s browser-specific',
-          'If on mobile, ensure no other apps are using the camera'
+          '🔴 IMPORTANT: Close ALL other applications that might be using the camera:',
+          '  • Video conferencing apps (Zoom, Teams, Skype, Google Meet)',
+          '  • Other browser tabs with camera access',
+          '  • Camera apps on your device',
+          '  • Screen recording software',
+          '',
+          '🔄 Try these steps in order:',
+          '1. Close this tab and all other browser tabs',
+          '2. Completely quit and restart your browser',
+          '3. Check Task Manager (Windows) or Activity Monitor (Mac) for camera processes',
+          '4. Restart your computer',
+          '',
+          '💻 System-level checks:',
+          '• Windows: Settings > Privacy > Camera - ensure browser has permission',
+          '• Mac: System Settings > Privacy & Security > Camera - ensure browser has permission',
+          '• Windows: Device Manager > Cameras - check for yellow warning icons',
+          '• Test your camera in the native camera app to verify it works',
+          '',
+          '🌐 Browser-specific:',
+          '• Try a different browser (Chrome, Firefox, Edge, Safari)',
+          '• Clear browser cache and cookies',
+          '• Try incognito/private mode',
+          '',
+          '🔌 Hardware (if external camera):',
+          '• Unplug and reconnect the camera',
+          '• Try a different USB port',
+          '• Check if camera works in other applications'
         ]
       }
     } else {
@@ -214,8 +232,10 @@ export default function Camera() {
         console.warn('⚠️ CAMERA DEBUG: Could not enumerate devices:', enumError)
       }
 
-      // Wait a moment before trying to access camera (sometimes helps with hardware initialization)
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Wait longer before trying to access camera (gives hardware time to initialize/release)
+      // This is especially important if the camera was recently used by another app
+      console.log('🎥 CAMERA DEBUG: Waiting 500ms before camera access (hardware initialization)')
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       // Try each constraint set until one works
       for (let i = 0; i < tryConstraints.length; i++) {
@@ -237,14 +257,25 @@ export default function Camera() {
           }
           // If it's NotReadableError or videoinput error and we have more attempts, continue
           if (i < tryConstraints.length - 1) {
-            // Wait a bit longer before trying next constraint (gives hardware time to reset)
-            await new Promise(resolve => setTimeout(resolve, 300))
+            // Wait longer before trying next constraint (gives hardware time to reset/release)
+            const waitTime = error.message?.includes('videoinput') ? 500 : 300
+            console.log(`🎥 CAMERA DEBUG: Waiting ${waitTime}ms before next attempt (hardware reset)`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
             continue
           }
         }
       }
 
       if (!mediaStream) {
+        // Log all failed attempts for debugging
+        console.error('❌ CAMERA DEBUG: All constraint attempts failed')
+        console.error('❌ CAMERA DEBUG: Last error:', lastError)
+        
+        // Provide more helpful error message
+        const errorMessage = lastError?.message || 'Unknown error'
+        if (errorMessage.includes('videoinput') || errorMessage.includes('Starting videoinput')) {
+          throw new Error('Camera hardware initialization failed. The camera may be in use by another application or there may be a driver issue.')
+        }
         throw lastError || new Error('Could not access camera with any constraints')
       }
 
