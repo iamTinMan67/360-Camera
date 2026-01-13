@@ -1109,7 +1109,10 @@ export default function Camera() {
               playsInline
               muted
               className="w-full h-full object-cover"
-              style={{ display: stream ? 'block' : 'none' }}
+              style={{ 
+                display: stream ? 'block' : 'none',
+                visibility: stream ? 'visible' : 'hidden'
+              }}
               onLoadedMetadata={() => {
                     console.log('🎥 CAMERA DEBUG: onLoadedMetadata event fired')
                     // Ensure video plays when metadata is loaded (Safari)
