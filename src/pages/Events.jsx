@@ -72,11 +72,12 @@ export default function Events() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Events</h1>
+      <div className="flex items-center justify-between">
+        <div className="w-24" /> {/* Spacer to balance the button width */}
+        <h1 className="text-3xl font-bold text-center flex-1">Events</h1>
         <button
           onClick={() => setShowEditModal('new')}
-          className="btn-primary"
+          className="btn-primary w-24"
         >
           <Plus className="inline-block mr-2 h-5 w-5" />
           New Event
