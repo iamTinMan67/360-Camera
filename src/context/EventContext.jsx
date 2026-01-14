@@ -14,11 +14,6 @@ export function useEvents() {
 export function EventProvider({ children }) {
   const [events, setEvents] = useState([])
   const [currentEvent, setCurrentEvent] = useState(null)
-  const [deviceType, setDeviceType] = useState(() => {
-    // Load device type preference from localStorage
-    const saved = localStorage.getItem('cameraDeviceType')
-    return saved || 'mobile' // Default to mobile
-  })
 
   // Load events and current event from localStorage on mount
   useEffect(() => {
@@ -171,11 +166,6 @@ export function EventProvider({ children }) {
     return events.find(event => event.id === eventId)
   }
 
-  // Save device type to localStorage
-  useEffect(() => {
-    localStorage.setItem('cameraDeviceType', deviceType)
-  }, [deviceType])
-
   const value = {
     events,
     currentEvent,
@@ -185,9 +175,7 @@ export function EventProvider({ children }) {
     deleteEvent,
     addMediaToEvent,
     deleteMediaFromEvent,
-    getEventById,
-    deviceType,
-    setDeviceType
+    getEventById
   }
 
   return <EventContext.Provider value={value}>{children}</EventContext.Provider>

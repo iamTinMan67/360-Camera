@@ -18,15 +18,8 @@ export default function Camera() {
   const [stream, setStream] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
   const [capturedMedia, setCapturedMedia] = useState(null)
-  // Default to 'environment' (back camera) on mobile, 'user' (front) on desktop
-  const [facingMode, setFacingMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-                    (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform))
-      return mobile ? 'environment' : 'user'
-    }
-    return 'user'
-  })
+  // Fixed device profile: iPad (A16) using front camera
+  const [facingMode] = useState('user')
   const [cameraError, setCameraError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [shotCount, setShotCount] = useState(1) // 1, 2, 3, or 4 shots
@@ -40,9 +33,29 @@ export default function Camera() {
   const [uploadedLinks, setUploadedLinks] = useState([])
   const [copiedLink, setCopiedLink] = useState(null)
   const [videoReady, setVideoReady] = useState(false)
+  const [streamIsLandscape, setStreamIsLandscape] = useState(false)
   const [isLoopRecording, setIsLoopRecording] = useState(false)
   
-  const { currentEvent, addMediaToEvent, deviceType, updateEvent } = useEvents()
+  const { currentEvent, addMediaToEvent, updateEvent } = useEvents()
+
+  const requestFullscreenOrientation = async (orientation) => {
+    // Best-effort: iOS Safari usually requires a user gesture for fullscreen/orientation lock.
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (screen?.orientation?.lock) {
+        await screen.orientation.lock(orientation)
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   // Detect Safari browser
   const isSafari = () => {
@@ -194,19 +207,18 @@ export default function Camera() {
     }
     
     try {
+      const wantLandscape = mode === 'video'
+      await requestFullscreenOrientation(wantLandscape ? 'landscape' : 'portrait')
       // Check if getUserMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera API not supported in this browser')
       }
 
-      // Optimize constraints based on device type preference (set by admin) or auto-detect
-      const useMobileSettings = deviceType === 'mobile' || (deviceType !== 'desktop' && isMobile())
+      // Fixed device profile: iPad (A16)
       const hasMultipleCams = await hasMultipleCameras()
       
-      console.log('🎥 CAMERA DEBUG: Device detection:', {
-        deviceTypePreference: deviceType,
-        useMobileSettings,
-        autoDetectedMobile: isMobile(),
+      console.log('🎥 CAMERA DEBUG: Device profile:', {
+        profile: 'ipad-a16-front-portrait',
         hasMultipleCams,
         userAgent: navigator.userAgent.substring(0, 50)
       })
@@ -214,98 +226,78 @@ export default function Camera() {
       // Try with ideal constraints first, then fallback to basic constraints
       // Mobile devices: start with lower resolution for better performance
       // Desktop: start with higher resolution
-      const tryConstraints = useMobileSettings ? [
-        // Mobile/Tablet optimized constraints
+      const photoConstraints = [
+        // iPad A16 front camera, prefer portrait 3:4, higher quality first
         {
           video: {
-            facingMode: facingMode,
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 }
+            facingMode: { ideal: 'user' },
+            aspectRatio: { ideal: 3 / 4 }, // portrait
+            width: { ideal: 1440, max: 1920 },
+            height: { ideal: 1920, max: 2560 },
+            frameRate: { ideal: 30, max: 60 }
           },
           audio: true
         },
         {
           video: {
-            facingMode: facingMode,
-            width: { ideal: 640 },
-            height: { ideal: 480 }
+            facingMode: { ideal: 'user' },
+            aspectRatio: { ideal: 3 / 4 },
+            width: { ideal: 1080 },
+            height: { ideal: 1440 }
           },
           audio: true
-        },
-        {
-          video: {
-            facingMode: facingMode
-          },
-          audio: true
-        },
-        {
-          video: true,
-          audio: true
-        },
-        {
-          video: {
-            facingMode: facingMode,
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          },
-          audio: false
-        },
-        {
-          video: {
-            facingMode: facingMode
-          },
-          audio: false
-        },
-        {
-          video: true,
-          audio: false
         }
-      ] : [
-        // Desktop constraints (higher resolution)
+      ]
+
+      const videoConstraints = [
+        // iPhone 16 Pro Max front camera, prefer landscape 16:9 (video)
         {
           video: {
-            facingMode: facingMode,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            facingMode: { ideal: 'user' },
+            aspectRatio: { ideal: 16 / 9 }, // landscape
+            width: { ideal: 1920, max: 3840 },
+            height: { ideal: 1080, max: 2160 },
+            frameRate: { ideal: 60, max: 60 }
           },
           audio: true
         },
         {
           video: {
-            facingMode: facingMode,
+            facingMode: { ideal: 'user' },
+            aspectRatio: { ideal: 16 / 9 },
+            width: { ideal: 1920, max: 3840 },
+            height: { ideal: 1080, max: 2160 },
+            frameRate: { ideal: 30, max: 60 }
+          },
+          audio: true
+        },
+        {
+          video: {
+            facingMode: { ideal: 'user' },
+            aspectRatio: { ideal: 16 / 9 },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 60, max: 60 }
+          },
+          audio: true
+        },
+        {
+          video: {
+            facingMode: { ideal: 'user' },
             width: { ideal: 1280 },
             height: { ideal: 720 }
           },
           audio: true
-        },
-        {
-          video: {
-            facingMode: facingMode
-          },
-          audio: true
-        },
-        {
-          video: true,
-          audio: true
-        },
-        {
-          video: {
-            facingMode: facingMode,
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          },
-          audio: false
-        },
-        {
-          video: {
-            facingMode: facingMode
-          },
-          audio: false
-        },
-        {
-          video: true,
-          audio: false
         }
+      ]
+
+      const tryConstraints = [
+        ...(mode === 'video' ? videoConstraints : photoConstraints),
+        // fallbacks
+        { video: { facingMode: { ideal: 'user' } }, audio: true },
+        { video: true, audio: true },
+        { video: { facingMode: { ideal: 'user' } }, audio: false },
+        { video: true, audio: false }
       ]
 
       let mediaStream = null
@@ -819,9 +811,25 @@ export default function Camera() {
           }
         }
         
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        context.drawImage(video, 0, 0)
+        // Force portrait output for iPad front camera
+        const vw = video.videoWidth
+        const vh = video.videoHeight
+        const landscape = vw > vh
+
+        if (landscape) {
+          // Rotate 90deg clockwise into portrait canvas
+          canvas.width = vh
+          canvas.height = vw
+          context.save()
+          context.translate(canvas.width, 0)
+          context.rotate(Math.PI / 2)
+          context.drawImage(video, 0, 0, vw, vh)
+          context.restore()
+        } else {
+          canvas.width = vw
+          canvas.height = vh
+          context.drawImage(video, 0, 0)
+        }
 
         const blob = await new Promise((resolve) => {
           canvas.toBlob((blob) => {
@@ -1335,11 +1343,7 @@ export default function Camera() {
     }
   }
 
-  const toggleFacingMode = () => {
-    setFacingMode(prev => prev === 'user' ? 'environment' : 'user')
-    stopCamera()
-    setTimeout(() => startCamera(), 100)
-  }
+  // Device is fixed (iPad A16) using the front camera; no toggle.
 
 
   // Calculate progress percentage for circular progress (0-100)
@@ -1348,7 +1352,7 @@ export default function Camera() {
     : 0
 
   return (
-    <div className="space-y-6">
+    <div className="fixed inset-0 bg-black z-40 overflow-hidden">
       {/* Countdown Overlay */}
       {isCountingDown && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
@@ -1418,7 +1422,7 @@ export default function Camera() {
           </div>
         </div>
       )}
-      <div className="card">
+      <div className="card absolute top-4 left-4 right-4 z-50 max-h-[38vh] overflow-auto bg-white/85 backdrop-blur-lg">
         {mode === 'photo' ? (
           <div className="space-y-4">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Shots (3 secs):</label>
@@ -1533,20 +1537,36 @@ export default function Camera() {
         )}
       </div>
 
-      <div className="card">
-        <div className="space-y-4">
+      <div className="absolute inset-0 z-10">
+        <div className="absolute top-4 left-4 z-50">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 bg-black/60 text-white hover:bg-black/80 px-3 py-2 rounded-lg"
+          >
+            <X className="h-5 w-5" />
+            Exit
+          </Link>
+        </div>
+
+        <div className="space-y-4 h-full">
           {/* Video Preview */}
-          <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+          <div className="absolute inset-0 bg-black overflow-hidden">
             {/* Always render video element so ref is available */}
             <video
               ref={videoRef}
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover"
+              className="absolute top-1/2 left-1/2 object-cover"
               style={{ 
                 display: stream ? 'block' : 'none',
-                visibility: stream ? 'visible' : 'hidden'
+                visibility: stream ? 'visible' : 'hidden',
+                width: streamIsLandscape !== (mode === 'video') ? '100vh' : '100vw',
+                height: streamIsLandscape !== (mode === 'video') ? '100vw' : '100vh',
+                transform:
+                  streamIsLandscape !== (mode === 'video')
+                    ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
+                    : 'translate(-50%, -50%) scaleX(-1)'
               }}
               onLoadedMetadata={() => {
                     console.log('🎥 CAMERA DEBUG: onLoadedMetadata event fired')
@@ -1581,6 +1601,7 @@ export default function Camera() {
                         })
                         if (video.videoWidth > 0 && video.videoHeight > 0) {
                           console.log('✅ CAMERA DEBUG: Video ready from onLoadedMetadata!')
+                          setStreamIsLandscape(video.videoWidth > video.videoHeight)
                           setVideoReady(true)
                         } else {
                           // Try again after a short delay
@@ -1602,6 +1623,7 @@ export default function Camera() {
                       })
                       if (video.videoWidth > 0 && video.videoHeight > 0) {
                         console.log('✅ CAMERA DEBUG: Video ready from onPlaying!')
+                        setStreamIsLandscape(video.videoWidth > video.videoHeight)
                         setVideoReady(true)
                       }
                     }
@@ -1618,6 +1640,7 @@ export default function Camera() {
                       })
                       if (video.videoWidth > 0 && video.videoHeight > 0) {
                         console.log('✅ CAMERA DEBUG: Video ready from onLoadedData!')
+                        setStreamIsLandscape(video.videoWidth > video.videoHeight)
                         setVideoReady(true)
                       }
                     }
@@ -1692,7 +1715,7 @@ export default function Camera() {
           </div>
 
           {/* Controls */}
-          <div className="flex flex-wrap justify-center gap-4">
+          <div className="absolute inset-x-0 bottom-0 z-30 p-4 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex flex-wrap justify-center gap-4">
             {isLoading && !stream ? (
               <div className="flex items-center space-x-2 text-purple-600">
                 <RefreshCw className="h-5 w-5 animate-spin" />

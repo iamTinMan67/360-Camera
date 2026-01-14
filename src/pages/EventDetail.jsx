@@ -87,14 +87,16 @@ export default function EventDetail() {
           return
         }
 
-        // Create a new access link if none exists
+        // Create a new access link if none exists (48h expiry)
         const token = crypto.randomUUID()
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
 
         const { data: created, error: insertError } = await supabase
           .from('event_access_links')
           .insert({
             event_id: supabaseEventId,
-            token
+            token,
+            expires_at: expiresAt
           })
           .select('token')
           .single()
