@@ -150,12 +150,15 @@ export default function Camera() {
     setCameraError(null)
     setIsLoading(true)
     
-    // Clean up any existing stream first
+    // Clean up any existing stream first (only if there is one)
     if (stream) {
+      console.log('🎥 CAMERA DEBUG: Cleaning up existing stream before starting new one')
       stream.getTracks().forEach(track => track.stop())
       setStream(null)
+      // Wait a moment after cleanup before requesting new stream
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
-    if (videoRef.current) {
+    if (videoRef.current && videoRef.current.srcObject) {
       videoRef.current.srcObject = null
     }
     
