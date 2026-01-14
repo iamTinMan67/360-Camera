@@ -39,28 +39,41 @@ function RouteGuard({ children }) {
 }
 
 function AppRoutes() {
+  const location = useLocation()
+  const state = location.state
+  const backgroundLocation = state?.backgroundLocation
+
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route
-        path="/*"
-        element={
-          <Layout>
-            <RouteGuard>
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/camera" element={<Camera />} />
-                <Route path="/events" element={<Events />} />
-                <Route path="/events/:eventId" element={<EventDetail />} />
-                <Route path="/event-access/:token" element={<EventAccess />} />
-                <Route path="/gallery" element={<Gallery />} />
-                <Route path="*" element={<Navigate to="/login" replace />} />
-              </Routes>
-            </RouteGuard>
-          </Layout>
-        }
-      />
-    </Routes>
+    <>
+      <Routes location={backgroundLocation || location}>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/*"
+          element={
+            <Layout>
+              <RouteGuard>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/camera" element={<Camera />} />
+                  <Route path="/events" element={<Events />} />
+                  <Route path="/events/:eventId" element={<EventDetail />} />
+                  <Route path="/event-access/:token" element={<EventAccess />} />
+                  <Route path="/gallery" element={<Gallery />} />
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+              </RouteGuard>
+            </Layout>
+          }
+        />
+      </Routes>
+
+      {/* Login modal overlay when we navigated to /login with a backgroundLocation */}
+      {backgroundLocation && (
+        <Routes>
+          <Route path="/login" element={<Login />} />
+        </Routes>
+      )}
+    </>
   )
 }
 

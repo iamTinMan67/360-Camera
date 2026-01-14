@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
-import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Copy, Check, Turtle, Rabbit, Gauge } from 'lucide-react'
+import { useSearchParams, Link, useLocation } from 'react-router-dom'
+import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Turtle, Rabbit, Gauge } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
+import { useAuth } from '../context/AuthContext'
 import { uploadMediaToSupabase } from '../utils/supabaseMedia'
 import { supabase } from '../config/supabase'
 
 export default function Camera() {
   const [searchParams] = useSearchParams()
   const mode = searchParams.get('mode') || 'photo' // 'photo' or 'video'
+  const location = useLocation()
   
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -30,13 +32,12 @@ export default function Camera() {
   const [isCountingDown, setIsCountingDown] = useState(false)
   const [countdownValue, setCountdownValue] = useState(0)
   const [initialCountdownValue, setInitialCountdownValue] = useState(0)
-  const [uploadedLinks, setUploadedLinks] = useState([])
-  const [copiedLink, setCopiedLink] = useState(null)
   const [videoReady, setVideoReady] = useState(false)
   const [streamIsLandscape, setStreamIsLandscape] = useState(false)
   const [isLoopRecording, setIsLoopRecording] = useState(false)
   
   const { currentEvent, addMediaToEvent, updateEvent } = useEvents()
+  const { isAuthenticated } = useAuth()
 
   const requestFullscreenOrientation = async (orientation) => {
     // Best-effort: iOS Safari usually requires a user gesture for fullscreen/orientation lock.
@@ -1005,7 +1006,7 @@ export default function Camera() {
     // If there's already a captured video, discard it
     if (capturedMedia) {
       setCapturedMedia(null)
-      setUploadedLinks([])
+      // no-op: removed "Supabase Upload Complete" panel
     }
 
     // 5 second countdown before starting recording
@@ -1156,7 +1157,6 @@ export default function Camera() {
 
     const eventId = currentEvent.id
     setIsUploading(true)
-    setUploadedLinks([])
 
     try {
       // Sync event to Supabase if it doesn't have a supabaseEventId
@@ -1214,7 +1214,7 @@ export default function Camera() {
           )
         )
 
-      const links = []
+      // Removed the "Supabase Upload Complete" links panel; keep uploads + alerts only.
         let supabaseSuccessCount = 0
         for (let i = 0; i < capturedShots.length; i++) {
           const shot = capturedShots[i]
@@ -1227,7 +1227,6 @@ export default function Camera() {
             if (supabaseResult.success) {
               supabaseUrl = supabaseResult.publicUrl
               supabaseSuccessCount += 1
-              links.push(supabaseUrl)
             } else {
               console.error(`Failed to upload photo ${i + 1}:`, supabaseResult.error, supabaseResult.details)
             }
@@ -1249,7 +1248,6 @@ export default function Camera() {
           reader.readAsDataURL(file)
         }
 
-        setUploadedLinks(links)
         setCapturedShots([])
         setCapturedMedia(null)
         
@@ -1276,7 +1274,6 @@ export default function Camera() {
           if (supabaseResult.success) {
             supabaseUrl = supabaseResult.publicUrl
             supabaseSuccess = true
-            setUploadedLinks([supabaseUrl])
           } else {
             console.error('Failed to upload media:', supabaseResult.error, supabaseResult.details)
           }
@@ -1540,7 +1537,8 @@ export default function Camera() {
       <div className="absolute inset-0 z-10">
         <div className="absolute top-4 left-4 z-50">
           <Link
-            to="/"
+            to={isAuthenticated ? '/' : '/login?next=/events'}
+            state={!isAuthenticated ? { backgroundLocation: location } : undefined}
             className="inline-flex items-center gap-2 bg-black/60 text-white hover:bg-black/80 px-3 py-2 rounded-lg"
           >
             <X className="h-5 w-5" />
@@ -1924,54 +1922,6 @@ export default function Camera() {
               </>
             )}
 
-            {uploadedLinks.length > 0 && (
-              <div className="card bg-purple-50 border-2 border-purple-200">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-purple-700 flex items-center">
-                    <Cloud className="h-5 w-5 mr-2" />
-                    Supabase Upload Complete!
-                  </h3>
-                </div>
-                <div className="space-y-2">
-                  {uploadedLinks.map((link, index) => (
-                    <div key={index} className="flex items-center gap-2 bg-white rounded-lg p-3">
-                      <input
-                        type="text"
-                        value={link}
-                        readOnly
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50"
-                      />
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(link)
-                          setCopiedLink(index)
-                          setTimeout(() => setCopiedLink(null), 2000)
-                        }}
-                        className="btn-secondary text-sm px-3 py-2"
-                        title="Copy link"
-                      >
-                        {copiedLink === index ? (
-                          <Check className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </button>
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-primary text-sm px-3 py-2"
-                      >
-                        Open
-                      </a>
-                    </div>
-                  ))}
-                  <p className="text-xs text-gray-600 mt-2">
-                    Files are stored in Supabase and can be shared via these links
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {isRecording && (

@@ -1,15 +1,27 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Lock, User, Camera } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const isModal = Boolean(location.state?.backgroundLocation)
+
+  const handleCancel = () => {
+    // If we opened as a modal over another page, just go back.
+    if (isModal) {
+      navigate(-1)
+      return
+    }
+    navigate('/', { replace: true })
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -19,7 +31,8 @@ export default function Login() {
     try {
       const success = await login(username, password)
       if (success) {
-        navigate('/events')
+        const next = searchParams.get('next') || '/events'
+        navigate(next, { replace: true })
       } else {
         setError('Invalid username or password')
       }
@@ -32,8 +45,23 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-yellow-100 flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
+    <div
+      className={
+        isModal
+          ? 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4'
+          : 'min-h-screen bg-gradient-to-br from-yellow-50 to-yellow-100 flex items-center justify-center px-4'
+      }
+      onClick={() => {
+        // Click outside the modal closes it (modal mode only)
+        if (isModal) handleCancel()
+      }}
+    >
+      <div
+        className="max-w-md w-full"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
+      >
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="bg-purple-100 p-4 rounded-full">
@@ -44,7 +72,17 @@ export default function Login() {
           <p className="text-gray-600">Admin Login Required</p>
         </div>
 
-        <div className="bg-yellow-50 rounded-xl shadow-lg p-8">
+        <div className="bg-yellow-50 rounded-xl shadow-lg p-8 relative">
+          {isModal && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+              title="Cancel"
+            >
+              ×
+            </button>
+          )}
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
@@ -89,6 +127,14 @@ export default function Login() {
               className="w-full btn-primary py-3 text-lg"
             >
               {isLoading ? 'Logging in...' : 'Login'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="w-full btn-secondary py-3 text-lg"
+            >
+              Cancel
             </button>
           </form>
         </div>

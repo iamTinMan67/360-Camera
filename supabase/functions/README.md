@@ -22,3 +22,14 @@ supabase functions deploy guest-gallery
 supabase secrets set SUPABASE_URL="https://YOUR_PROJECT.supabase.co" SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"
 ```
 
+## Function: `ensure-access-link`
+
+Creates (or reuses) a 48-hour guest QR token for a given Supabase `event_id`.
+
+### Required secrets
+
+Set these in Supabase Dashboard:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `ADMIN_PASSWORD`
+

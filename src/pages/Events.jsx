@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useState } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { supabase } from '../config/supabase'
+import { ensureAccessLink } from '../utils/ensureAccessLink'
 
 export default function Events() {
   const navigate = useNavigate()
@@ -90,36 +91,17 @@ export default function Events() {
       // Ensure the event has a Supabase UUID
       const supabaseEventId = await ensureSupabaseEventId(event)
 
-      // Ensure an access link exists for that Supabase event UUID
-      const { data: existingLink, error: linkFindError } = await supabase
-        .from('event_access_links')
-        .select('token')
-        .eq('event_id', supabaseEventId)
-        .limit(1)
-        .maybeSingle()
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const { token } = await ensureAccessLink({
+        supabaseUrl,
+        supabaseKey,
+        adminPassword: 'Sal@SB',
+        eventId: supabaseEventId,
+        expiresHours: 48
+      })
 
-      if (linkFindError) {
-        throw new Error(`Failed to check access links: ${linkFindError.message}`)
-      }
-
-      if (existingLink?.token) {
-        setQrToken(existingLink.token)
-        return
-      }
-
-      const token = crypto.randomUUID()
-      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-      const { data: createdLink, error: linkCreateError } = await supabase
-        .from('event_access_links')
-        .insert({ event_id: supabaseEventId, token, expires_at: expiresAt })
-        .select('token')
-        .single()
-
-      if (linkCreateError) {
-        throw new Error(`Failed to create access link: ${linkCreateError.message}`)
-      }
-
-      setQrToken(createdLink.token)
+      setQrToken(token)
     } catch (e) {
       setQrError(e.message || 'Unable to generate QR code.')
     } finally {

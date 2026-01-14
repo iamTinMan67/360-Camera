@@ -5,6 +5,7 @@ import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
 import { QRCodeCanvas } from 'qrcode.react'
 import { supabase } from '../config/supabase'
+import { ensureAccessLink } from '../utils/ensureAccessLink'
 
 export default function EventDetail() {
   const { eventId } = useParams()
@@ -70,42 +71,17 @@ export default function EventDetail() {
           }
         }
 
-        // Try to find an existing access link for this event
-        const { data: existing, error: fetchError } = await supabase
-          .from('event_access_links')
-          .select('token')
-          .eq('event_id', supabaseEventId)
-          .limit(1)
-          .maybeSingle()
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+        const { token } = await ensureAccessLink({
+          supabaseUrl,
+          supabaseKey,
+          adminPassword: 'Sal@SB',
+          eventId: supabaseEventId,
+          expiresHours: 48
+        })
 
-        if (fetchError) {
-          throw fetchError
-        }
-
-        if (existing?.token) {
-          setQrToken(existing.token)
-          return
-        }
-
-        // Create a new access link if none exists (48h expiry)
-        const token = crypto.randomUUID()
-        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-
-        const { data: created, error: insertError } = await supabase
-          .from('event_access_links')
-          .insert({
-            event_id: supabaseEventId,
-            token,
-            expires_at: expiresAt
-          })
-          .select('token')
-          .single()
-
-        if (insertError) {
-          throw insertError
-        }
-
-        setQrToken(created.token)
+        setQrToken(token)
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Error creating event access link', error)
