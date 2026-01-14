@@ -259,8 +259,12 @@ export default function Camera() {
           }
           // If it's NotReadableError or videoinput error and we have more attempts, continue
           if (i < tryConstraints.length - 1) {
-            // Wait longer before trying next constraint (gives hardware time to reset/release)
-            const waitTime = error.message?.includes('videoinput') ? 500 : 300
+            // Wait before trying next constraint (gives hardware time to reset/release)
+            // Shorter delay for localhost
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            const waitTime = error.message?.includes('videoinput') 
+              ? (isLocalhost ? 200 : 500) 
+              : (isLocalhost ? 100 : 300)
             console.log(`🎥 CAMERA DEBUG: Waiting ${waitTime}ms before next attempt (hardware reset)`)
             await new Promise(resolve => setTimeout(resolve, waitTime))
             continue
