@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Share2, Copy, Check } from 'lucide-react'
+import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Share2, Copy, Check, Turtle, Rabbit, Gauge } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 import { uploadToFileIO, uploadMultipleToFileIO } from '../utils/fileio'
 
@@ -1362,7 +1362,10 @@ export default function Camera() {
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                Slow-Mo (0.5x)
+                <div className="flex flex-col items-center gap-1">
+                  <Turtle className="h-5 w-5" />
+                  <span className="text-xs">0.5x</span>
+                </div>
               </button>
               <button
                 onClick={() => setVideoSpeed(1.0)}
@@ -1372,7 +1375,10 @@ export default function Camera() {
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                Normal (1x)
+                <div className="flex flex-col items-center gap-1">
+                  <Gauge className="h-5 w-5" />
+                  <span className="text-xs">1x</span>
+                </div>
               </button>
               <button
                 onClick={() => setVideoSpeed(2.0)}
@@ -1382,7 +1388,10 @@ export default function Camera() {
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                Fast (2x)
+                <div className="flex flex-col items-center gap-1">
+                  <Rabbit className="h-5 w-5" />
+                  <span className="text-xs">2x</span>
+                </div>
               </button>
             </div>
           </div>
@@ -1704,19 +1713,40 @@ export default function Camera() {
                 ) : (
                   <>
                     {!isRecording ? (
-                      <button 
-                        onClick={startRecording} 
-                        className={`font-semibold py-2 px-4 rounded-lg transition-colors ${
-                          isCountingDown || isUploading || !videoReady
-                            ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                            : 'bg-green-500 hover:bg-green-600 text-white'
-                        }`}
-                        disabled={isCountingDown || isUploading || !videoReady}
-                        title={!videoReady ? 'Waiting for camera to be ready...' : ''}
-                      >
-                        <Video className="inline-block mr-2 h-5 w-5" />
-                        Record Video
-                      </button>
+                      <div className="flex flex-wrap gap-3 justify-center">
+                        <button 
+                          onClick={startRecording} 
+                          className={`font-semibold py-2 px-4 rounded-lg transition-colors ${
+                            isCountingDown || isUploading || !videoReady
+                              ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                              : 'bg-green-500 hover:bg-green-600 text-white'
+                          }`}
+                          disabled={isCountingDown || isUploading || !videoReady}
+                          title={!videoReady ? 'Waiting for camera to be ready...' : ''}
+                        >
+                          <Video className="inline-block mr-2 h-5 w-5" />
+                          Record Video
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!currentEvent) {
+                              alert('Loop recording requires an event. Please select or create an event first.')
+                              return
+                            }
+                            setIsLoopRecording((prev) => !prev)
+                          }}
+                          className={`font-semibold py-2 px-4 rounded-lg border transition-colors ${
+                            isLoopRecording
+                              ? 'bg-green-500 text-white border-green-600'
+                              : 'bg-white text-gray-700 border-gray-300'
+                          }`}
+                        >
+                          <RefreshCw className="inline-block mr-2 h-5 w-5" />
+                          {isLoopRecording ? 'Loop: On (24s max)' : 'Start Loop (24s max)'}
+                        </button>
+                      </div>
                     ) : (
                       <button onClick={stopRecording} className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg">
                         <Square className="inline-block mr-2 h-5 w-5" />
@@ -1748,46 +1778,23 @@ export default function Camera() {
             {(capturedMedia || capturedShots.length > 0) && (
               <>
                 {currentEvent && (
-                  <div className="flex flex-wrap gap-3 justify-center">
-                    <button 
-                      onClick={saveMedia} 
-                      className="btn-primary"
-                      disabled={isUploading}
-                    >
-                      {isUploading ? (
-                        <>
-                          <Cloud className="inline-block mr-2 h-5 w-5 animate-pulse" />
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Cloud className="inline-block mr-2 h-5 w-5" />
-                          Save & Upload
-                        </>
-                      )}
-                    </button>
-
-                    {mode === 'video' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!currentEvent) {
-                            alert('Loop recording requires an event. Please select or create an event first.')
-                            return
-                          }
-                          setIsLoopRecording((prev) => !prev)
-                        }}
-                        className={`font-semibold py-2 px-4 rounded-lg border transition-colors ${
-                          isLoopRecording
-                            ? 'bg-green-500 text-white border-green-600'
-                            : 'bg-white text-gray-700 border-gray-300'
-                        }`}
-                      >
-                        <RefreshCw className="inline-block mr-2 h-5 w-5" />
-                        {isLoopRecording ? 'Loop: On (24s max)' : 'Loop: Off (24s max)'}
-                      </button>
+                  <button 
+                    onClick={saveMedia} 
+                    className="btn-primary"
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <Cloud className="inline-block mr-2 h-5 w-5 animate-pulse" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Cloud className="inline-block mr-2 h-5 w-5" />
+                        Save & Upload
+                      </>
                     )}
-                  </div>
+                  </button>
                 )}
               </>
             )}
