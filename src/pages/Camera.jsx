@@ -1112,7 +1112,7 @@ export default function Camera() {
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
-                title="2 Shots (2 second delay)"
+                title="2 Shots (3 second delay)"
               >
                 <div className="relative w-10 h-10 flex items-center justify-center">
                   <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
@@ -1143,7 +1143,7 @@ export default function Camera() {
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
-                title="4 Shots (4 second delay)"
+                title="4 Shots (3 second delay)"
               >
                 <div className="relative w-10 h-10 flex items-center justify-center">
                   <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
