@@ -16,7 +16,15 @@ export default function Camera() {
   const [stream, setStream] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
   const [capturedMedia, setCapturedMedia] = useState(null)
-  const [facingMode, setFacingMode] = useState('user') // 'user' or 'environment'
+  // Default to 'environment' (back camera) on mobile, 'user' (front) on desktop
+  const [facingMode, setFacingMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                    (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform))
+      return mobile ? 'environment' : 'user'
+    }
+    return 'user'
+  })
   const [cameraError, setCameraError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [shotCount, setShotCount] = useState(1) // 1, 2, or 3 shots
@@ -34,6 +42,23 @@ export default function Camera() {
   const isSafari = () => {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || 
            (navigator.userAgent.includes('Mac') && navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome'))
+  }
+
+  // Detect mobile/tablet devices
+  const isMobile = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform))
+  }
+
+  // Detect if device has multiple cameras (for better camera selection)
+  const hasMultipleCameras = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const videoDevices = devices.filter(device => device.kind === 'videoinput')
+      return videoDevices.length > 1
+    } catch {
+      return false
+    }
   }
 
   const getErrorMessage = (error) => {
@@ -168,9 +193,67 @@ export default function Camera() {
         throw new Error('Camera API not supported in this browser')
       }
 
+      // Optimize constraints based on device type
+      const mobile = isMobile()
+      const hasMultipleCams = await hasMultipleCameras()
+      
+      console.log('🎥 CAMERA DEBUG: Device detection:', {
+        mobile,
+        hasMultipleCams,
+        userAgent: navigator.userAgent.substring(0, 50)
+      })
+
       // Try with ideal constraints first, then fallback to basic constraints
-      // Add more fallback options including video-only (no audio)
-      const tryConstraints = [
+      // Mobile devices: start with lower resolution for better performance
+      // Desktop: start with higher resolution
+      const tryConstraints = mobile ? [
+        // Mobile/Tablet optimized constraints
+        {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
+          },
+          audio: true
+        },
+        {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: true
+        },
+        {
+          video: {
+            facingMode: facingMode
+          },
+          audio: true
+        },
+        {
+          video: true,
+          audio: true
+        },
+        {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: false
+        },
+        {
+          video: {
+            facingMode: facingMode
+          },
+          audio: false
+        },
+        {
+          video: true,
+          audio: false
+        }
+      ] : [
+        // Desktop constraints (higher resolution)
         {
           video: {
             facingMode: facingMode,
