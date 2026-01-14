@@ -737,6 +737,7 @@ export default function Camera() {
   const startCountdown = (seconds) => {
     return new Promise((resolve) => {
       setIsCountingDown(true)
+      setInitialCountdownValue(seconds)
       setCountdownValue(seconds)
       
       const interval = setInterval(() => {
@@ -745,6 +746,7 @@ export default function Camera() {
             clearInterval(interval)
             setIsCountingDown(false)
             setCountdownValue(0)
+            setInitialCountdownValue(0)
             resolve()
             return 0
           }
@@ -1120,8 +1122,11 @@ export default function Camera() {
 
 
   // Calculate progress percentage for circular progress (0-100)
-  const countdownProgress = isCountingDown && countdownValue > 0 
-    ? ((countdownValue / (countdownValue === 5 ? 5 : 3)) * 100) 
+  // Track the initial countdown value to calculate progress correctly
+  const [initialCountdownValue, setInitialCountdownValue] = useState(0)
+  
+  const countdownProgress = isCountingDown && countdownValue > 0 && initialCountdownValue > 0
+    ? ((initialCountdownValue - countdownValue) / initialCountdownValue) * 100
     : 0
 
   return (
