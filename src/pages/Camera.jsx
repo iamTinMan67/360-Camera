@@ -1600,14 +1600,15 @@ export default function Camera() {
               </button>
             ) : stream ? (
               <>
-                <button onClick={toggleFacingMode} className="btn-secondary" disabled={isCapturing || isRecording || isUploading}>
-                  Switch Camera
-                </button>
                 {mode === 'photo' ? (
                   <button 
                     onClick={capturePhoto} 
-                    className="btn-primary" 
-                    disabled={!!capturedMedia || isCapturing || !videoReady}
+                    className={`font-semibold py-2 px-4 rounded-lg transition-colors ${
+                      isCapturing || isCountingDown || isUploading || !videoReady
+                        ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                        : 'bg-green-500 hover:bg-green-600 text-white'
+                    }`}
+                    disabled={isCapturing || isCountingDown || isUploading || !videoReady}
                     title={!videoReady ? 'Waiting for camera to be ready...' : ''}
                   >
                     <CameraIcon className="inline-block mr-2 h-5 w-5" />
