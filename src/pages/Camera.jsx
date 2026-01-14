@@ -1352,24 +1352,46 @@ export default function Camera() {
                     
                     // Now try to play
                     try {
-                      await video.play()
-                      console.log('✅ CAMERA DEBUG: Manual play successful')
-                      
-                      // Check state after play
-                      setTimeout(() => {
-                        if (videoRef.current) {
-                          console.log('🎥 CAMERA DEBUG: State after manual play:', {
-                            paused: videoRef.current.paused,
-                            readyState: videoRef.current.readyState,
-                            videoWidth: videoRef.current.videoWidth,
-                            videoHeight: videoRef.current.videoHeight,
-                            currentTime: videoRef.current.currentTime
-                          })
+                      const playPromise = video.play()
+                      if (playPromise !== undefined) {
+                        await playPromise
+                        console.log('✅ CAMERA DEBUG: Manual play successful')
+                        
+                        // Force check for dimensions after play
+                        const checkDimensions = () => {
+                          if (videoRef.current) {
+                            const v = videoRef.current
+                            console.log('🎥 CAMERA DEBUG: Checking dimensions after play:', {
+                              paused: v.paused,
+                              readyState: v.readyState,
+                              videoWidth: v.videoWidth,
+                              videoHeight: v.videoHeight,
+                              currentTime: v.currentTime
+                            })
+                            
+                            if (v.videoWidth > 0 && v.videoHeight > 0) {
+                              console.log('✅ CAMERA DEBUG: Video has dimensions!')
+                              setVideoReady(true)
+                            } else if (v.readyState >= 2) {
+                              // Video has data but no dimensions yet, keep checking
+                              setTimeout(checkDimensions, 100)
+                            }
+                          }
                         }
-                      }, 500)
+                        
+                        // Check immediately and then periodically
+                        setTimeout(checkDimensions, 100)
+                        setTimeout(checkDimensions, 500)
+                        setTimeout(checkDimensions, 1000)
+                      }
                     } catch (error) {
                       console.error('❌ CAMERA DEBUG: Manual play failed:', error)
-                      alert(`Video play failed: ${error.message}. Please check browser permissions.`)
+                      console.error('❌ CAMERA DEBUG: Error details:', {
+                        name: error.name,
+                        message: error.message,
+                        stack: error.stack
+                      })
+                      alert(`Video play failed: ${error.message || error.name}. Please check browser permissions.`)
                     }
                   }
                 }}
