@@ -1675,18 +1675,6 @@ export default function Camera() {
                     )}
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    setCapturedMedia(null)
-                    setCapturedShots([])
-                    setUploadedLinks([])
-                  }}
-                  className="btn-secondary"
-                  disabled={isUploading}
-                >
-                  <X className="inline-block mr-2 h-5 w-5" />
-                  Discard
-                </button>
               </>
             )}
 
