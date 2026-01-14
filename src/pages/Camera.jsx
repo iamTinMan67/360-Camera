@@ -1194,40 +1194,6 @@ export default function Camera() {
         )}
       </div>
 
-      {/* Debug Panel - Remove in production */}
-      {(process.env.NODE_ENV === 'development' || true) && (
-        <div className="card bg-gray-100 text-xs">
-          <div className="font-semibold mb-2">Camera Debug Status:</div>
-          <div className="space-y-1">
-            <div>Stream: {stream ? '✅ Active' : '❌ None'}</div>
-            <div>Video Element: {videoRef.current ? '✅ Exists' : '❌ Missing'}</div>
-            <div>Video Ready: {videoReady ? '✅ Yes' : '❌ No'}</div>
-            {videoRef.current && (
-              <>
-                <div>Video Dimensions: {videoRef.current.videoWidth}x{videoRef.current.videoHeight}</div>
-                <div>Video ReadyState: {videoRef.current.readyState}</div>
-                <div>Video Paused: {videoRef.current.paused ? 'Yes' : 'No'}</div>
-                <div>Has srcObject: {videoRef.current.srcObject ? 'Yes' : 'No'}</div>
-              </>
-            )}
-            {stream && (
-              <>
-                <div>Tracks: {stream.getTracks().length} ({stream.getTracks().map(t => t.kind).join(', ')})</div>
-                <div>Active Tracks: {stream.getTracks().filter(t => t.readyState === 'live').length}</div>
-                <div>Track States: {stream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(', ')}</div>
-                {videoRef.current && (
-                  <>
-                    <div>Video srcObject matches stream: {videoRef.current.srcObject === stream ? 'Yes' : 'No'}</div>
-                    <div>Video autoplay: {videoRef.current.autoplay ? 'Yes' : 'No'}</div>
-                    <div>Video muted: {videoRef.current.muted ? 'Yes' : 'No'}</div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="card">
         <div className="space-y-4">
           {/* Video Preview */}
