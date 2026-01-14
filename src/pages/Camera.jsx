@@ -1039,6 +1039,19 @@ export default function Camera() {
 
       setCapturedMedia(videoData)
 
+      // Auto-download recorded video for user convenience (similar to photo auto-download)
+      try {
+        const videoExtension = recordedMimeType?.includes('mp4') ? 'mp4' : 'webm'
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `video-${Date.now()}.${videoExtension}`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      } catch (downloadError) {
+        console.error('Automatic video download failed:', downloadError)
+      }
+
       // If loop recording is enabled, auto-save and restart
       if (isLoopRecording) {
         autoSaveVideoAndLoop(blob, recordedMimeType, videoData.timestamp)
@@ -1271,21 +1284,40 @@ export default function Camera() {
           </div>
         </div>
       )}
-      <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <Link
-            to="/"
-            className="text-purple-600 hover:text-purple-700 text-sm font-semibold"
-          >
-            ← Back
-          </Link>
-          <h1 className="text-3xl font-bold text-center flex-1">
-            {mode === 'video' ? '360 Video' : 'Photo Booth'}
-          </h1>
-          {/* Spacer to balance the back link width */}
-          <div className="w-16" />
+      {!stream && cameraError && (
+        <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+          <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+          <h3 className="text-xl font-bold text-white mb-2">{cameraError.title}</h3>
+          <p className="text-gray-300 mb-4">{cameraError.message}</p>
+          <div className="bg-gray-900 rounded-lg p-4 max-w-md w-full text-left">
+            <p className="text-sm font-semibold text-white mb-2">Troubleshooting Steps:</p>
+            <ul className="text-sm text-gray-300 space-y-1">
+              {cameraError.steps.map((step, index) => (
+                <li key={index} className="flex items-start">
+                  <span className="text-purple-400 mr-2">•</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="mt-4 flex space-x-3">
+            <button
+              onClick={startCamera}
+              className="btn-primary"
+            >
+              <RefreshCw className="inline-block mr-2 h-4 w-4" />
+              Try Again
+            </button>
+            <button
+              onClick={() => setCameraError(null)}
+              className="btn-secondary"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
-        
+      )}
+      <div className="card">
         {mode === 'photo' ? (
           <div className="space-y-4">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Shots (3 secs):</label>
@@ -1523,39 +1555,6 @@ export default function Camera() {
                   </div>
                 )}
               </>
-            )}
-            {!stream && cameraError && (
-              <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
-                <h3 className="text-xl font-bold text-white mb-2">{cameraError.title}</h3>
-                <p className="text-gray-300 mb-4">{cameraError.message}</p>
-                <div className="bg-gray-900 rounded-lg p-4 max-w-md w-full text-left">
-                  <p className="text-sm font-semibold text-white mb-2">Troubleshooting Steps:</p>
-                  <ul className="text-sm text-gray-300 space-y-1">
-                    {cameraError.steps.map((step, index) => (
-                      <li key={index} className="flex items-start">
-                        <span className="text-purple-400 mr-2">•</span>
-                        <span>{step}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="mt-4 flex space-x-3">
-                  <button
-                    onClick={startCamera}
-                    className="btn-primary"
-                  >
-                    <RefreshCw className="inline-block mr-2 h-4 w-4" />
-                    Try Again
-                  </button>
-                  <button
-                    onClick={() => setCameraError(null)}
-                    className="btn-secondary"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
             )}
             {!stream && !cameraError && (
               <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6">
