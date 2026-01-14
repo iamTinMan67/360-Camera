@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Plus, Trash2, Image as ImageIcon, Video, Edit2, X } from 'lucide-react'
+import { Calendar, Plus, Trash2, Image as ImageIcon, Video, Edit2, X, Smartphone, Monitor } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
 import { useState } from 'react'
 
 export default function Events() {
   const navigate = useNavigate()
-  const { events, deleteEvent, setCurrentEvent, getEventById, createEvent, updateEvent } = useEvents()
+  const { events, deleteEvent, setCurrentEvent, getEventById, createEvent, updateEvent, deviceType, setDeviceType } = useEvents()
   const { isAuthenticated, logout } = useAuth()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [showEditModal, setShowEditModal] = useState(null)
@@ -248,6 +248,41 @@ export default function Events() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-transparent"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Device Type
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDeviceType('mobile')}
+                    className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                      deviceType === 'mobile'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <Smartphone className="h-5 w-5" />
+                    Mobile/Tablet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeviceType('desktop')}
+                    className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+                      deviceType === 'desktop'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <Monitor className="h-5 w-5" />
+                    Desktop
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Optimizes camera settings for the selected device type
+                </p>
               </div>
 
               <div className="flex space-x-3 pt-4">

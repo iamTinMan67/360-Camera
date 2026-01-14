@@ -27,7 +27,7 @@ export default function Camera() {
   })
   const [cameraError, setCameraError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [shotCount, setShotCount] = useState(1) // 1, 2, or 3 shots
+  const [shotCount, setShotCount] = useState(1) // 1, 2, 3, or 4 shots
   const [videoSpeed, setVideoSpeed] = useState(1.0) // 0.5 (slow-mo), 1.0 (normal), 2.0 (fast)
   const [capturedShots, setCapturedShots] = useState([])
   const [isCapturing, setIsCapturing] = useState(false)
@@ -36,7 +36,7 @@ export default function Camera() {
   const [copiedLink, setCopiedLink] = useState(null)
   const [videoReady, setVideoReady] = useState(false)
   
-  const { currentEvent, addMediaToEvent } = useEvents()
+  const { currentEvent, addMediaToEvent, deviceType } = useEvents()
 
   // Detect Safari browser
   const isSafari = () => {
@@ -206,7 +206,7 @@ export default function Camera() {
       // Try with ideal constraints first, then fallback to basic constraints
       // Mobile devices: start with lower resolution for better performance
       // Desktop: start with higher resolution
-      const tryConstraints = mobile ? [
+      const tryConstraints = useMobileSettings ? [
         // Mobile/Tablet optimized constraints
         {
           video: {
@@ -765,8 +765,8 @@ export default function Camera() {
     const shots = []
     const context = canvas.getContext('2d')
 
-    // Determine delay based on shot count: 2 shots = 2 seconds, 3 shots = 3 seconds
-    const delayBetweenShots = shotCount === 2 ? 2000 : shotCount === 3 ? 3000 : 0
+    // Determine delay based on shot count: 2 shots = 2 seconds, 3 shots = 3 seconds, 4 shots = 4 seconds
+    const delayBetweenShots = shotCount === 2 ? 2000 : shotCount === 3 ? 3000 : shotCount === 4 ? 4000 : 0
 
     try {
       for (let i = 0; i < shotCount; i++) {
@@ -1089,37 +1089,67 @@ export default function Camera() {
         
         {mode === 'photo' ? (
           <div className="space-y-4">
-            <label className="block text-sm font-semibold text-gray-700">Select Number of Shots:</label>
-            <div className="flex gap-3">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Select Number of Shots:</label>
+            <div className="grid grid-cols-4 gap-3">
               <button
                 onClick={() => setShotCount(1)}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-2 ${
                   shotCount === 1
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
+                title="1 Shot"
               >
-                1 Shot
+                <CameraIcon className="h-8 w-8" />
+                <span className="text-xs">1</span>
               </button>
               <button
                 onClick={() => setShotCount(2)}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-1 ${
                   shotCount === 2
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
+                title="2 Shots (2 second delay)"
               >
-                2 Shots
+                <div className="flex gap-1">
+                  <CameraIcon className="h-6 w-6" />
+                  <CameraIcon className="h-6 w-6" />
+                </div>
+                <span className="text-xs">2</span>
               </button>
               <button
                 onClick={() => setShotCount(3)}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-1 ${
                   shotCount === 3
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
+                title="3 Shots (3 second delay)"
               >
-                3 Shots
+                <div className="flex gap-1">
+                  <CameraIcon className="h-5 w-5" />
+                  <CameraIcon className="h-5 w-5" />
+                  <CameraIcon className="h-5 w-5" />
+                </div>
+                <span className="text-xs">3</span>
+              </button>
+              <button
+                onClick={() => setShotCount(4)}
+                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-1 ${
+                  shotCount === 4
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+                title="4 Shots (4 second delay)"
+              >
+                <div className="flex flex-wrap gap-0.5 justify-center max-w-[60px]">
+                  <CameraIcon className="h-4 w-4" />
+                  <CameraIcon className="h-4 w-4" />
+                  <CameraIcon className="h-4 w-4" />
+                  <CameraIcon className="h-4 w-4" />
+                </div>
+                <span className="text-xs">4</span>
               </button>
             </div>
           </div>
