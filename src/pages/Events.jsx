@@ -10,17 +10,27 @@ export default function Events() {
   const { isAuthenticated, logout } = useAuth()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [showEditModal, setShowEditModal] = useState(null)
+  const [showDeviceSelection, setShowDeviceSelection] = useState(false)
+  const [pendingEventId, setPendingEventId] = useState(null)
   const [editFormData, setEditFormData] = useState({ name: '', type: '', date: '' })
 
   const handleSelectEvent = (eventId) => {
     const event = getEventById(eventId)
     if (event) {
       setCurrentEvent(event)
-      // Auto-logout admin after event selection
-      logout()
-      // Navigate to home page
-      navigate('/')
+      // Show device selection modal before navigating
+      setPendingEventId(eventId)
+      setShowDeviceSelection(true)
     }
+  }
+
+  const handleDeviceSelected = () => {
+    // Auto-logout admin after device selection
+    logout()
+    // Navigate to home page
+    setShowDeviceSelection(false)
+    setPendingEventId(null)
+    navigate('/')
   }
 
   const handleDelete = (eventId) => {
@@ -38,8 +48,9 @@ export default function Events() {
     if (showEditModal === 'new') {
       const newEvent = createEvent(editFormData)
       setCurrentEvent(newEvent)
-      logout()
-      navigate('/')
+      // Show device selection modal before navigating
+      setPendingEventId(newEvent.id)
+      setShowDeviceSelection(true)
     } else {
       updateEvent(showEditModal, editFormData)
     }
@@ -106,8 +117,8 @@ export default function Events() {
                     })}
                   </div>
                 </div>
-                <div className="flex space-x-1">
-                  {isAuthenticated && (
+                {isAuthenticated && (
+                  <div className="flex space-x-2">
                     <button
                       onClick={() => {
                         setEditFormData({
@@ -117,22 +128,20 @@ export default function Events() {
                         })
                         setShowEditModal(event.id)
                       }}
-                      className="text-purple-600 hover:text-purple-700 p-1"
+                      className="text-purple-600 hover:text-purple-700 p-2 rounded-lg hover:bg-purple-50 transition-colors"
                       title="Edit event"
                     >
                       <Edit2 className="h-5 w-5" />
                     </button>
-                  )}
-                  {isAuthenticated && (
                     <button
                       onClick={() => setShowDeleteConfirm(event.id)}
-                      className="text-red-500 hover:text-red-700 p-1"
+                      className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
                       title="Delete event"
                     >
                       <Trash2 className="h-5 w-5" />
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
@@ -250,41 +259,6 @@ export default function Events() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Device Type
-                </label>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setDeviceType('mobile')}
-                    className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                      deviceType === 'mobile'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    <Smartphone className="h-5 w-5" />
-                    Mobile/Tablet
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeviceType('desktop')}
-                    className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
-                      deviceType === 'desktop'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    <Monitor className="h-5 w-5" />
-                    Desktop
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Optimizes camera settings for the selected device type
-                </p>
-              </div>
-
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
@@ -304,6 +278,58 @@ export default function Events() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDeviceSelection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-yellow-50 rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Select Device Type</h2>
+              <button
+                onClick={() => {
+                  setShowDeviceSelection(false)
+                  setPendingEventId(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Choose the device type that will be used for this event. This optimizes camera settings for better performance.
+            </p>
+            <div className="space-y-4">
+              <button
+                onClick={() => {
+                  setDeviceType('mobile')
+                  handleDeviceSelected()
+                }}
+                className={`w-full py-4 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-3 ${
+                  deviceType === 'mobile'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <Smartphone className="h-6 w-6" />
+                <span>Mobile/Tablet</span>
+              </button>
+              <button
+                onClick={() => {
+                  setDeviceType('desktop')
+                  handleDeviceSelected()
+                }}
+                className={`w-full py-4 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-3 ${
+                  deviceType === 'desktop'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <Monitor className="h-6 w-6" />
+                <span>Desktop</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
