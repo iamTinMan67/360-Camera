@@ -897,12 +897,21 @@ export default function Camera() {
     return ''
   }
 
-  const startRecording = () => {
+  const startRecording = async () => {
     if (!stream) {
       console.error('Cannot start recording: no stream available')
       alert('Camera stream is not available. Please ensure the camera is enabled.')
       return
     }
+
+    // If there's already a captured video, discard it
+    if (capturedMedia) {
+      setCapturedMedia(null)
+      setUploadedLinks([])
+    }
+
+    // 5 second countdown before starting recording
+    await startCountdown(5)
 
     console.log('Starting video recording:', {
       streamActive: stream.active,
@@ -1619,8 +1628,12 @@ export default function Camera() {
                     {!isRecording ? (
                       <button 
                         onClick={startRecording} 
-                        className="btn-primary" 
-                        disabled={!!capturedMedia || !videoReady}
+                        className={`font-semibold py-2 px-4 rounded-lg transition-colors ${
+                          isCountingDown || isUploading || !videoReady
+                            ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                            : 'bg-green-500 hover:bg-green-600 text-white'
+                        }`}
+                        disabled={isCountingDown || isUploading || !videoReady}
                         title={!videoReady ? 'Waiting for camera to be ready...' : ''}
                       >
                         <Video className="inline-block mr-2 h-5 w-5" />
