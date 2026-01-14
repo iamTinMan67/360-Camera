@@ -32,6 +32,8 @@ export default function Camera() {
   const [capturedShots, setCapturedShots] = useState([])
   const [isCapturing, setIsCapturing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isCountingDown, setIsCountingDown] = useState(false)
+  const [countdownValue, setCountdownValue] = useState(0)
   const [uploadedLinks, setUploadedLinks] = useState([])
   const [copiedLink, setCopiedLink] = useState(null)
   const [videoReady, setVideoReady] = useState(false)
@@ -731,12 +733,34 @@ export default function Camera() {
     }
   }, [stream])
 
+  // Countdown function with circular progress
+  const startCountdown = (seconds) => {
+    return new Promise((resolve) => {
+      setIsCountingDown(true)
+      setCountdownValue(seconds)
+      
+      const interval = setInterval(() => {
+        setCountdownValue((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval)
+            setIsCountingDown(false)
+            setCountdownValue(0)
+            resolve()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    })
+  }
+
   const capturePhoto = async () => {
-    if (!videoRef.current || !canvasRef.current || isCapturing) {
+    if (!videoRef.current || !canvasRef.current || isCapturing || isCountingDown) {
       console.warn('Capture blocked:', { 
         hasVideo: !!videoRef.current, 
         hasCanvas: !!canvasRef.current, 
-        isCapturing 
+        isCapturing,
+        isCountingDown
       })
       return
     }
@@ -767,14 +791,18 @@ export default function Camera() {
     const shots = []
     const context = canvas.getContext('2d')
 
-    // Determine delay based on shot count: 3 seconds between shots for all multi-shot options
-    const delayBetweenShots = shotCount > 1 ? 3000 : 0
+    // 5 second countdown before first shot, 3 seconds between subsequent shots
+    const initialCountdown = 5
+    const delayBetweenShots = 3
 
     try {
+      // 5 second countdown before first shot
+      await startCountdown(initialCountdown)
+
       for (let i = 0; i < shotCount; i++) {
-        // Capture immediately for first shot, then wait for subsequent shots
+        // 3 second countdown before subsequent shots
         if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, delayBetweenShots))
+          await startCountdown(delayBetweenShots)
           // Re-check video dimensions after delay
           if (!video.videoWidth || !video.videoHeight) {
             console.error('Video lost during capture')
@@ -822,6 +850,8 @@ export default function Camera() {
       alert('An error occurred while capturing the photo. Please try again.')
     } finally {
       setIsCapturing(false)
+      setIsCountingDown(false)
+      setCountdownValue(0)
     }
   }
 
@@ -1089,8 +1119,49 @@ export default function Camera() {
   }
 
 
+  // Calculate progress percentage for circular progress (0-100)
+  const countdownProgress = isCountingDown && countdownValue > 0 
+    ? ((countdownValue / (countdownValue === 5 ? 5 : 3)) * 100) 
+    : 0
+
   return (
     <div className="space-y-6">
+      {/* Countdown Overlay */}
+      {isCountingDown && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="relative w-64 h-64">
+            {/* Circular Progress Background */}
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
+              {/* Background circle */}
+              <circle
+                cx="100"
+                cy="100"
+                r="90"
+                fill="none"
+                stroke="rgba(255, 255, 255, 0.2)"
+                strokeWidth="12"
+              />
+              {/* Progress circle */}
+              <circle
+                cx="100"
+                cy="100"
+                r="90"
+                fill="none"
+                stroke="#ef4444"
+                strokeWidth="12"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 90}`}
+                strokeDashoffset={`${2 * Math.PI * 90 * (1 - countdownProgress / 100)}`}
+                className="transition-all duration-1000 ease-linear"
+              />
+            </svg>
+            {/* Countdown Number */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-8xl font-bold text-white">{countdownValue}</span>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="card">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">
