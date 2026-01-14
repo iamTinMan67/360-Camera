@@ -193,12 +193,14 @@ export default function Camera() {
         throw new Error('Camera API not supported in this browser')
       }
 
-      // Optimize constraints based on device type
-      const mobile = isMobile()
+      // Optimize constraints based on device type preference (set by admin) or auto-detect
+      const useMobileSettings = deviceType === 'mobile' || (deviceType !== 'desktop' && isMobile())
       const hasMultipleCams = await hasMultipleCameras()
       
       console.log('🎥 CAMERA DEBUG: Device detection:', {
-        mobile,
+        deviceTypePreference: deviceType,
+        useMobileSettings,
+        autoDetectedMobile: isMobile(),
         hasMultipleCams,
         userAgent: navigator.userAgent.substring(0, 50)
       })
