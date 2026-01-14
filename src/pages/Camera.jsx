@@ -1145,11 +1145,11 @@ export default function Camera() {
                 }`}
                 title="4 Shots (4 second delay)"
               >
-                <div className="relative w-8 h-8 flex items-center justify-center">
-                  <CameraIcon className="h-8 w-8 absolute top-0 left-0" />
-                  <CameraIcon className="h-8 w-8 absolute top-1 left-1" />
-                  <CameraIcon className="h-8 w-8 absolute top-2 left-2" />
-                  <CameraIcon className="h-8 w-8 absolute top-3 left-3" />
+                <div className="relative w-10 h-10 flex items-center justify-center">
+                  <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
+                  <CameraIcon className="h-10 w-10 absolute top-1 left-1" />
+                  <CameraIcon className="h-10 w-10 absolute top-2 left-2" />
+                  <CameraIcon className="h-10 w-10 absolute top-3 left-3" />
                 </div>
                 <span className="text-xs">4</span>
               </button>
