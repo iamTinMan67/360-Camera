@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Plus, Trash2, Image as ImageIcon, Video, Edit2, X, Smartphone, Monitor } from 'lucide-react'
+import { Calendar, Plus, Trash2, Image as ImageIcon, Video, Edit2, X, Smartphone } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
 import { useState } from 'react'
