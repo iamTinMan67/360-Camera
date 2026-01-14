@@ -489,12 +489,14 @@ export default function Camera() {
     setCapturedMedia(null)
   }
 
-  // Auto-start camera when component mounts (but not for Safari - requires user interaction)
+  // Auto-start camera when component mounts (only on localhost).
+  // On iOS / production browsers, camera permission often requires a user gesture.
   useEffect(() => {
     const initCamera = async () => {
-      // Safari requires user interaction to request camera permissions
-      // So we skip auto-start for Safari and show a button instead
-      if (!isSafari() && !stream && !cameraError) {
+      const isLocalhost =
+        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+
+      if (isLocalhost && !isSafari() && !stream && !cameraError) {
         await startCamera()
       }
     }
@@ -1704,27 +1706,24 @@ export default function Camera() {
                     <RefreshCw className="h-16 w-16 mb-4 animate-spin" />
                     <p className="text-sm">Starting camera...</p>
                   </>
-                ) : isSafari() ? (
+                ) : (
                   <>
                     <CameraIcon className="h-16 w-16 mb-4 text-purple-500" />
                     <p className="text-sm mb-4 text-center">
-                      Safari requires permission to access your camera.
+                      Tap below to enable camera access.
                     </p>
-                    <p className="text-xs mb-4 text-center text-gray-500">
-                      Click the button below to enable camera access.
-                    </p>
+                    {isSafari() && (
+                      <p className="text-xs mb-4 text-center text-gray-500">
+                        iPad/iPhone browsers require a tap to start the camera.
+                      </p>
+                    )}
                     <button
                       onClick={startCamera}
-                      className="btn-primary mt-4"
+                      className="btn-primary mt-2"
                     >
                       <CameraIcon className="inline-block mr-2 h-5 w-5" />
                       Enable Camera
                     </button>
-                  </>
-                ) : (
-                  <>
-                    <CameraIcon className="h-16 w-16 mb-4" />
-                    <p className="text-sm">Camera will start automatically</p>
                   </>
                 )}
               </div>
