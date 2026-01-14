@@ -306,28 +306,10 @@ export default function Events() {
                   setDeviceType('mobile')
                   handleDeviceSelected()
                 }}
-                className={`w-full py-4 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-3 ${
-                  deviceType === 'mobile'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                className="w-full py-4 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-3 bg-purple-600 text-white hover:bg-purple-700"
               >
                 <Smartphone className="h-6 w-6" />
                 <span>Mobile/Tablet</span>
-              </button>
-              <button
-                onClick={() => {
-                  setDeviceType('desktop')
-                  handleDeviceSelected()
-                }}
-                className={`w-full py-4 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center gap-3 ${
-                  deviceType === 'desktop'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <Monitor className="h-6 w-6" />
-                <span>Desktop</span>
               </button>
             </div>
           </div>
