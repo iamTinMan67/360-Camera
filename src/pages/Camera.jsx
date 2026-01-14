@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Share2, Copy, Check, Turtle, Rabbit, Gauge } from 'lucide-react'
+import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Copy, Check, Turtle, Rabbit, Gauge } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
-import { uploadToFileIO, uploadMultipleToFileIO } from '../utils/fileio'
 import { uploadMediaToSupabase } from '../utils/supabaseMedia'
+import { supabase } from '../config/supabase'
 
 export default function Camera() {
   const [searchParams] = useSearchParams()
@@ -42,7 +42,7 @@ export default function Camera() {
   const [videoReady, setVideoReady] = useState(false)
   const [isLoopRecording, setIsLoopRecording] = useState(false)
   
-  const { currentEvent, addMediaToEvent, deviceType } = useEvents()
+  const { currentEvent, addMediaToEvent, deviceType, updateEvent } = useEvents()
 
   // Detect Safari browser
   const isSafari = () => {
@@ -919,18 +919,50 @@ export default function Camera() {
         { type: mimeType || 'video/webm' }
       )
 
-      const uploadResult = await uploadToFileIO(file, {
-        maxDownloads: 100,
-        autoDelete: false
-      })
+      // Sync event to Supabase if needed (for loop recording)
+      let supabaseEventId = currentEvent.supabaseEventId
+      if (!supabaseEventId) {
+        // Try to find or create event in Supabase
+        const { data: existingEvent } = await supabase
+          .from('events')
+          .select('id')
+          .eq('name', currentEvent.name)
+          .eq('date', currentEvent.date)
+          .limit(1)
+          .maybeSingle()
+        
+        if (existingEvent?.id) {
+          supabaseEventId = existingEvent.id
+          updateEvent(currentEvent.id, { supabaseEventId })
+        } else {
+          const { data: newEvent } = await supabase
+            .from('events')
+            .insert({
+              name: currentEvent.name,
+              type: currentEvent.type || 'other',
+              date: currentEvent.date
+            })
+            .select('id')
+            .single()
+          
+          if (newEvent?.id) {
+            supabaseEventId = newEvent.id
+            updateEvent(currentEvent.id, { supabaseEventId })
+          }
+        }
+      }
 
-      // Upload to Supabase if event has Supabase ID
+      // Upload to Supabase (only)
       let supabaseUrl = null
-      if (currentEvent.supabaseEventId) {
-        const supabaseResult = await uploadMediaToSupabase(file, currentEvent.supabaseEventId, 'video')
+      if (supabaseEventId) {
+        const supabaseResult = await uploadMediaToSupabase(file, supabaseEventId, 'video')
         if (supabaseResult.success) {
           supabaseUrl = supabaseResult.publicUrl
+        } else {
+          console.error('Failed to upload video in loop:', supabaseResult.error, supabaseResult.details)
         }
+      } else {
+        console.warn('No supabaseEventId available for loop recording, skipping Supabase upload')
       }
 
       const reader = new FileReader()
@@ -941,9 +973,7 @@ export default function Camera() {
           data: base64Data,
           timestamp,
           speed: videoSpeed,
-          fileioLink: uploadResult.success ? uploadResult.link : null,
-          fileioKey: uploadResult.success ? uploadResult.key : null,
-          supabaseUrl: supabaseUrl
+          supabaseUrl
         })
       }
       reader.readAsDataURL(file)
@@ -1121,8 +1151,52 @@ export default function Camera() {
     setUploadedLinks([])
 
     try {
+      // Sync event to Supabase if it doesn't have a supabaseEventId
+      let supabaseEventId = currentEvent.supabaseEventId
+      if (!supabaseEventId) {
+        console.log('Event missing Supabase ID, syncing to Supabase...')
+        
+        // Try to find existing event in Supabase by name and date
+        const { data: existingEvent, error: findError } = await supabase
+          .from('events')
+          .select('id')
+          .eq('name', currentEvent.name)
+          .eq('date', currentEvent.date)
+          .limit(1)
+          .maybeSingle()
+        
+        if (findError) {
+          console.error('Error checking for existing event:', findError)
+        }
+        
+        if (existingEvent?.id) {
+          supabaseEventId = existingEvent.id
+          console.log('Found existing event in Supabase:', supabaseEventId)
+          updateEvent(eventId, { supabaseEventId })
+        } else {
+          // Create new event in Supabase
+          const { data: newEvent, error: createError } = await supabase
+            .from('events')
+            .insert({
+              name: currentEvent.name,
+              type: currentEvent.type || 'other',
+              date: currentEvent.date
+            })
+            .select('id')
+            .single()
+          
+          if (createError) {
+            console.error('Failed to create event in Supabase:', createError)
+            alert(`Failed to sync event to Supabase: ${createError.message}. Media will be saved locally only.`)
+          } else {
+            supabaseEventId = newEvent.id
+            console.log('Created new event in Supabase:', supabaseEventId)
+            updateEvent(eventId, { supabaseEventId })
+          }
+        }
+      }
       if (mode === 'photo' && capturedShots.length > 0) {
-        // Save all shots with file.io upload
+        // Save all shots (Supabase)
         const shotCount = capturedShots.length
         const files = capturedShots.map((shot, index) => 
           new File(
@@ -1132,25 +1206,25 @@ export default function Camera() {
           )
         )
 
-        // Upload all shots to file.io
-        const uploadResults = await uploadMultipleToFileIO(files, {
-          maxDownloads: 100, // Allow multiple downloads
-          autoDelete: false
-        })
-
-        const links = []
+      const links = []
+        let supabaseSuccessCount = 0
         for (let i = 0; i < capturedShots.length; i++) {
           const shot = capturedShots[i]
-          const uploadResult = uploadResults[i]
           const file = files[i]
           
-          // Upload to Supabase if event has Supabase ID
+        // Upload to Supabase (only)
           let supabaseUrl = null
-          if (currentEvent.supabaseEventId) {
-            const supabaseResult = await uploadMediaToSupabase(file, currentEvent.supabaseEventId, 'photo')
+          if (supabaseEventId) {
+            const supabaseResult = await uploadMediaToSupabase(file, supabaseEventId, 'photo')
             if (supabaseResult.success) {
               supabaseUrl = supabaseResult.publicUrl
+              supabaseSuccessCount += 1
+              links.push(supabaseUrl)
+            } else {
+              console.error(`Failed to upload photo ${i + 1}:`, supabaseResult.error, supabaseResult.details)
             }
+          } else {
+            console.warn('No supabaseEventId available, skipping Supabase upload')
           }
           
           // Save to local storage (base64)
@@ -1161,48 +1235,45 @@ export default function Camera() {
               type: 'photo',
               data: base64Data,
               timestamp: shot.timestamp,
-              fileioLink: uploadResult.success ? uploadResult.link : null,
-              fileioKey: uploadResult.success ? uploadResult.key : null,
-              supabaseUrl: supabaseUrl
+              supabaseUrl
             })
           }
           reader.readAsDataURL(file)
-
-          if (uploadResult.success) {
-            links.push(uploadResult.link)
-          }
         }
 
         setUploadedLinks(links)
         setCapturedShots([])
         setCapturedMedia(null)
         
-        if (links.length > 0) {
-          alert(`${shotCount} photo(s) saved and uploaded to cloud! ${links.length} file.io link(s) created.`)
+        const parts = [`${shotCount} photo(s) saved locally.`]
+        if (supabaseSuccessCount > 0) {
+          parts.push(`${supabaseSuccessCount} uploaded to Supabase.`)
         } else {
-          alert(`${shotCount} photo(s) saved locally. Cloud upload failed.`)
+          parts.push('Supabase upload failed. Check browser console for details.')
         }
+        alert(parts.join(' '))
       } else if (capturedMedia) {
-        // Save single video or photo with file.io upload
+        // Save single video or photo (Supabase)
         const file = new File(
           [capturedMedia.blob],
           `${capturedMedia.type}-${currentEvent.name}-${Date.now()}.${capturedMedia.type === 'photo' ? 'jpg' : 'webm'}`,
           { type: capturedMedia.type === 'photo' ? 'image/jpeg' : 'video/webm' }
         )
 
-        // Upload to file.io
-        const uploadResult = await uploadToFileIO(file, {
-          maxDownloads: 100,
-          autoDelete: false
-        })
-
-        // Upload to Supabase if event has Supabase ID
+        // Upload to Supabase (only)
         let supabaseUrl = null
-        if (currentEvent.supabaseEventId) {
-          const supabaseResult = await uploadMediaToSupabase(file, currentEvent.supabaseEventId, capturedMedia.type)
+        let supabaseSuccess = false
+        if (supabaseEventId) {
+          const supabaseResult = await uploadMediaToSupabase(file, supabaseEventId, capturedMedia.type)
           if (supabaseResult.success) {
             supabaseUrl = supabaseResult.publicUrl
+            supabaseSuccess = true
+            setUploadedLinks([supabaseUrl])
+          } else {
+            console.error('Failed to upload media:', supabaseResult.error, supabaseResult.details)
           }
+        } else {
+          console.warn('No supabaseEventId available, skipping Supabase upload')
         }
 
         // Save to local storage
@@ -1214,19 +1285,18 @@ export default function Camera() {
             data: base64Data,
             timestamp: capturedMedia.timestamp,
             speed: capturedMedia.speed,
-            fileioLink: uploadResult.success ? uploadResult.link : null,
-            fileioKey: uploadResult.success ? uploadResult.key : null,
-            supabaseUrl: supabaseUrl
+            supabaseUrl
           })
         }
         reader.readAsDataURL(file)
 
-        if (uploadResult.success) {
-          setUploadedLinks([uploadResult.link])
-          alert('Media saved and uploaded to cloud! File.io link created.')
+        const parts = ['Media saved locally.']
+        if (supabaseSuccess) {
+          parts.push('Uploaded to Supabase.')
         } else {
-          alert('Media saved locally. Cloud upload failed: ' + uploadResult.error)
+          parts.push('Supabase upload failed. Check browser console for details.')
         }
+        alert(parts.join(' '))
 
         setCapturedMedia(null)
       }
@@ -1835,8 +1905,8 @@ export default function Camera() {
               <div className="card bg-purple-50 border-2 border-purple-200">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-purple-700 flex items-center">
-                    <Share2 className="h-5 w-5 mr-2" />
-                    Cloud Upload Complete!
+                    <Cloud className="h-5 w-5 mr-2" />
+                    Supabase Upload Complete!
                   </h3>
                 </div>
                 <div className="space-y-2">
@@ -1874,7 +1944,7 @@ export default function Camera() {
                     </div>
                   ))}
                   <p className="text-xs text-gray-600 mt-2">
-                    Files are stored in the cloud and can be shared via these links
+                    Files are stored in Supabase and can be shared via these links
                   </p>
                 </div>
               </div>

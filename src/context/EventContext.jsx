@@ -115,9 +115,37 @@ export function EventProvider({ children }) {
     setEvents(prev =>
       prev.map(event => {
         if (event.id === eventId) {
+          // Don't store full base64 data in localStorage to avoid quota issues
+          // Only store metadata and Supabase URL if available
+          const mediaToStore = {
+            ...mediaItem,
+            id: Date.now().toString(),
+            timestamp: new Date().toISOString()
+          }
+          
+          // If we have a Supabase URL, prefer that over base64
+          if (mediaItem.supabaseUrl) {
+            // Store minimal data - just metadata and Supabase URL
+            const { data, ...metadata } = mediaToStore
+            return {
+              ...event,
+              media: [...event.media, { ...metadata, supabaseUrl: mediaItem.supabaseUrl }]
+            }
+          }
+          
+          // Fallback: store base64 but truncate if too large (>1MB)
+          if (mediaItem.data && mediaItem.data.length > 1000000) {
+            console.warn('Media too large for localStorage, storing metadata only')
+            const { data, ...metadata } = mediaToStore
+            return {
+              ...event,
+              media: [...event.media, metadata]
+            }
+          }
+          
           return {
             ...event,
-            media: [...event.media, { ...mediaItem, id: Date.now().toString(), timestamp: new Date().toISOString() }]
+            media: [...event.media, mediaToStore]
           }
         }
         return event

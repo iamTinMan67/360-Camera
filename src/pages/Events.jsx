@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Plus, Trash2, Image as ImageIcon, Video, Edit2, X, Smartphone } from 'lucide-react'
+import { Calendar, Plus, Trash2, Image as ImageIcon, Video, Edit2, X, Smartphone, QrCode } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
 import { useState } from 'react'
+import { QRCodeCanvas } from 'qrcode.react'
+import { supabase } from '../config/supabase'
 
 export default function Events() {
   const navigate = useNavigate()
@@ -12,11 +14,103 @@ export default function Events() {
   const [showEditModal, setShowEditModal] = useState(null)
   const [showDeviceSelection, setShowDeviceSelection] = useState(false)
   const [pendingEventId, setPendingEventId] = useState(null)
+  const [showQrModal, setShowQrModal] = useState(false)
+  const [qrEvent, setQrEvent] = useState(null)
+  const [qrToken, setQrToken] = useState(null)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [qrError, setQrError] = useState(null)
   const [editFormData, setEditFormData] = useState({
     name: '',
     type: '',
     date: new Date().toISOString().slice(0, 10) // default to today
   })
+
+  const openGuestQr = async (event) => {
+    if (!isAuthenticated) {
+      alert('Admin login required to generate guest QR codes.')
+      return
+    }
+
+    setShowQrModal(true)
+    setQrEvent(event)
+    setQrToken(null)
+    setQrError(null)
+    setQrLoading(true)
+
+    try {
+      // Ensure the event has a Supabase UUID
+      let supabaseEventId = event.supabaseEventId
+      if (!supabaseEventId) {
+        const { data: existingEvent, error: findError } = await supabase
+          .from('events')
+          .select('id')
+          .eq('name', event.name)
+          .eq('date', event.date)
+          .limit(1)
+          .maybeSingle()
+
+        if (findError) {
+          throw new Error(`Failed to check Supabase: ${findError.message}`)
+        }
+
+        if (existingEvent?.id) {
+          supabaseEventId = existingEvent.id
+          updateEvent(event.id, { supabaseEventId })
+        } else {
+          const { data: createdEvent, error: createError } = await supabase
+            .from('events')
+            .insert({
+              name: event.name,
+              type: event.type || 'other',
+              date: event.date
+            })
+            .select('id')
+            .single()
+
+          if (createError) {
+            throw new Error(`Failed to create event in Supabase: ${createError.message}`)
+          }
+
+          supabaseEventId = createdEvent.id
+          updateEvent(event.id, { supabaseEventId })
+        }
+      }
+
+      // Ensure an access link exists for that Supabase event UUID
+      const { data: existingLink, error: linkFindError } = await supabase
+        .from('event_access_links')
+        .select('token')
+        .eq('event_id', supabaseEventId)
+        .limit(1)
+        .maybeSingle()
+
+      if (linkFindError) {
+        throw new Error(`Failed to check access links: ${linkFindError.message}`)
+      }
+
+      if (existingLink?.token) {
+        setQrToken(existingLink.token)
+        return
+      }
+
+      const token = crypto.randomUUID()
+      const { data: createdLink, error: linkCreateError } = await supabase
+        .from('event_access_links')
+        .insert({ event_id: supabaseEventId, token })
+        .select('token')
+        .single()
+
+      if (linkCreateError) {
+        throw new Error(`Failed to create access link: ${linkCreateError.message}`)
+      }
+
+      setQrToken(createdLink.token)
+    } catch (e) {
+      setQrError(e.message || 'Unable to generate QR code.')
+    } finally {
+      setQrLoading(false)
+    }
+  }
 
   const handleSelectEvent = (eventId) => {
     const event = getEventById(eventId)
@@ -137,6 +231,13 @@ export default function Events() {
                 </div>
                 {isAuthenticated && (
                   <div className="flex space-x-2">
+                    <button
+                      onClick={() => openGuestQr(event)}
+                      className="text-purple-600 hover:text-purple-700 p-2 rounded-lg hover:bg-purple-50 transition-colors"
+                      title="Guest QR"
+                    >
+                      <QrCode className="h-5 w-5" />
+                    </button>
                     <button
                       onClick={() => {
                         setEditFormData({
@@ -329,6 +430,48 @@ export default function Events() {
                 <span>Mobile/Tablet</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showQrModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 relative">
+            <button
+              type="button"
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+              title="Close"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <h2 className="text-2xl font-bold mb-2 text-center">Guest Gallery QR</h2>
+            <p className="text-sm text-gray-600 text-center mb-4">
+              {qrEvent ? `Event: ${qrEvent.name}` : ''}
+            </p>
+            {qrLoading ? (
+              <div className="text-center text-gray-600">Preparing QR…</div>
+            ) : qrError ? (
+              <p className="text-red-600 text-center">{qrError}</p>
+            ) : (
+              <>
+                <div className="flex justify-center mb-4">
+                  {qrToken && (
+                    <QRCodeCanvas
+                      value={`${window.location.origin}/event-access/${qrToken}`}
+                      size={220}
+                      level="H"
+                      includeMargin
+                    />
+                  )}
+                </div>
+                {qrToken && (
+                  <div className="text-xs text-gray-600 break-all text-center">
+                    {`${window.location.origin}/event-access/${qrToken}`}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

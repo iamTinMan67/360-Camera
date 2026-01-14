@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Image as ImageIcon, Video, ArrowLeft, AlertCircle } from 'lucide-react'
+import { Image as ImageIcon, Video, ArrowLeft, AlertCircle, Download } from 'lucide-react'
 import { supabase } from '../config/supabase'
 
 export default function EventAccess() {
@@ -9,6 +9,50 @@ export default function EventAccess() {
   const [error, setError] = useState(null)
   const [event, setEvent] = useState(null)
   const [media, setMedia] = useState([])
+  const [downloadingId, setDownloadingId] = useState(null)
+
+  const downloadMedia = async (item) => {
+    const url = item.signed_url || item.public_url || item.url
+    if (!url) return
+
+    setDownloadingId(item.id)
+    try {
+      const resp = await fetch(url)
+      if (!resp.ok) {
+        throw new Error(`Download failed: ${resp.status} ${resp.statusText}`)
+      }
+      const blob = await resp.blob()
+
+      const extFromPath = (path) => {
+        if (!path) return null
+        const last = path.split('/').pop() || ''
+        const parts = last.split('.')
+        return parts.length > 1 ? parts.pop() : null
+      }
+
+      const ext =
+        extFromPath(item.storage_path) ||
+        (item.type === 'photo' ? 'jpg' : 'webm')
+
+      const filename = `${event?.name || 'event'}-${item.type}-${item.id}.${ext}`
+
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(objectUrl)
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error(e)
+      // Fallback: open in a new tab so the user can manually save
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   useEffect(() => {
     const loadEventByToken = async () => {
@@ -63,8 +107,31 @@ export default function EventAccess() {
           throw new Error(`Media lookup failed: ${mediaError.message}`)
         }
 
+        // Prefer signed URLs (works for private buckets + avoids ORB issues if public URL returns HTML)
+        const mediaWithUrls = await Promise.all(
+          (mediaData || []).map(async (item) => {
+            if (!item.storage_path) return item
+
+            const { data: signed, error: signedError } = await supabase.storage
+              .from('event-media')
+              .createSignedUrl(item.storage_path, 60 * 60) // 1 hour
+
+            if (signedError) {
+              // Fall back to whatever URL we already have
+              // eslint-disable-next-line no-console
+              console.warn('Failed to create signed URL for media', signedError)
+              return item
+            }
+
+            return {
+              ...item,
+              signed_url: signed.signedUrl
+            }
+          })
+        )
+
         setEvent(eventData)
-        setMedia(mediaData || [])
+        setMedia(mediaWithUrls)
       } catch (err) {
         setError(err.message || 'Something went wrong loading this event.')
       } finally {
@@ -139,16 +206,25 @@ export default function EventAccess() {
               key={item.id}
               className="relative bg-black rounded-lg overflow-hidden aspect-square"
             >
+              <button
+                type="button"
+                onClick={() => downloadMedia(item)}
+                disabled={downloadingId === item.id}
+                className="absolute top-2 right-2 z-10 inline-flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-60 w-10 h-10"
+                title="Download"
+              >
+                <Download className="h-5 w-5" />
+              </button>
               {item.type === 'photo' ? (
                 <img
-                  src={item.public_url || item.url}
+                  src={item.signed_url || item.public_url || item.url}
                   alt={`Photo from ${event.name}`}
                   className="w-full h-full object-cover"
                 />
               ) : (
                 <div className="relative w-full h-full">
                   <video
-                    src={item.public_url || item.url}
+                    src={item.signed_url || item.public_url || item.url}
                     className="w-full h-full object-cover"
                     controls
                   />

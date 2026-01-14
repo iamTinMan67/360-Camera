@@ -29,7 +29,16 @@ export async function uploadMediaToSupabase(file, supabaseEventId, type) {
 
     if (uploadError) {
       console.error('Supabase storage upload error:', uploadError)
-      return { success: false, error: uploadError.message }
+      // Provide more detailed error message
+      let errorMsg = uploadError.message
+      if (uploadError.message?.includes('Bucket not found')) {
+        errorMsg = 'Storage bucket "event-media" not found. Please create it in Supabase Storage.'
+      } else if (uploadError.message?.includes('new row violates row-level security')) {
+        errorMsg = 'Storage upload blocked by RLS policy. Check bucket permissions.'
+      } else if (uploadError.message?.includes('JWT')) {
+        errorMsg = 'Authentication error. Check your Supabase credentials.'
+      }
+      return { success: false, error: errorMsg, details: uploadError }
     }
 
     // Get public URL for the uploaded file
@@ -55,7 +64,14 @@ export async function uploadMediaToSupabase(file, supabaseEventId, type) {
       console.error('Supabase media record creation error:', mediaError)
       // Try to clean up the uploaded file
       await supabase.storage.from('event-media').remove([storagePath])
-      return { success: false, error: mediaError.message }
+      // Provide more detailed error message
+      let errorMsg = mediaError.message
+      if (mediaError.message?.includes('new row violates row-level security')) {
+        errorMsg = 'Media table insert blocked by RLS policy. Check table permissions.'
+      } else if (mediaError.message?.includes('foreign key')) {
+        errorMsg = 'Event not found. Make sure the event exists in Supabase.'
+      }
+      return { success: false, error: errorMsg, details: mediaError }
     }
 
     return {

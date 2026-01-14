@@ -151,7 +151,7 @@ export default function EventDetail() {
 
   const downloadMedia = (media) => {
     const link = document.createElement('a')
-    link.href = media.data
+    link.href = media.supabaseUrl || media.data
     link.download = `${media.type}-${media.id}.${media.type === 'photo' ? 'jpg' : 'webm'}`
     document.body.appendChild(link)
     link.click()
@@ -243,14 +243,14 @@ export default function EventDetail() {
               >
                 {media.type === 'photo' ? (
                   <img
-                    src={media.data}
+                    src={media.supabaseUrl || media.data}
                     alt={`Photo from ${event.name}`}
                     className="w-full h-full object-cover"
                   />
                 ) : (
                   <div className="relative w-full h-full">
                     <video
-                      src={media.data}
+                      src={media.supabaseUrl || media.data}
                       className="w-full h-full object-cover"
                       muted
                     />
@@ -271,16 +271,16 @@ export default function EventDetail() {
                     >
                       <Download className="h-5 w-5" />
                     </button>
-                    {media.fileioLink && (
+                    {media.supabaseUrl && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          navigator.clipboard.writeText(media.fileioLink)
+                          navigator.clipboard.writeText(media.supabaseUrl)
                           setCopiedLink(media.id)
                           setTimeout(() => setCopiedLink(null), 2000)
                         }}
                         className="bg-purple-600 text-white p-2 rounded-full hover:bg-purple-700"
-                        title="Copy cloud link"
+                        title="Copy Supabase link"
                       >
                         {copiedLink === media.id ? (
                           <Check className="h-5 w-5" />
@@ -321,14 +321,14 @@ export default function EventDetail() {
                 </button>
                 {selectedMedia.type === 'photo' ? (
                   <img
-                    src={selectedMedia.data}
+                    src={selectedMedia.supabaseUrl || selectedMedia.data}
                     alt="Full size"
                     className="max-w-full max-h-[90vh] mx-auto object-contain"
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
                   <video
-                    src={selectedMedia.data}
+                    src={selectedMedia.supabaseUrl || selectedMedia.data}
                     controls
                     autoPlay
                     className="max-w-full max-h-[90vh] mx-auto"
