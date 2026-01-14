@@ -1114,9 +1114,9 @@ export default function Camera() {
                 }`}
                 title="2 Shots (2 second delay)"
               >
-                <div className="flex gap-1">
-                  <CameraIcon className="h-8 w-8" />
-                  <CameraIcon className="h-8 w-8" />
+                <div className="relative w-10 h-10 flex items-center justify-center">
+                  <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
+                  <CameraIcon className="h-10 w-10 absolute top-1 left-1" />
                 </div>
                 <span className="text-xs">2</span>
               </button>
@@ -1129,10 +1129,10 @@ export default function Camera() {
                 }`}
                 title="3 Shots (3 second delay)"
               >
-                <div className="flex gap-1">
-                  <CameraIcon className="h-5 w-5" />
-                  <CameraIcon className="h-5 w-5" />
-                  <CameraIcon className="h-5 w-5" />
+                <div className="relative w-10 h-10 flex items-center justify-center">
+                  <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
+                  <CameraIcon className="h-10 w-10 absolute top-1 left-1" />
+                  <CameraIcon className="h-10 w-10 absolute top-2 left-2" />
                 </div>
                 <span className="text-xs">3</span>
               </button>
