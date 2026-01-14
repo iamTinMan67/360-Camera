@@ -1056,15 +1056,30 @@ export default function Camera() {
   }
 
   const downloadMedia = () => {
-    if (!capturedMedia) return
-
-    const videoExtension = capturedMedia.mimeType?.includes('mp4') ? 'mp4' : 'webm'
-    const a = document.createElement('a')
-    a.href = capturedMedia.url
-    a.download = `${capturedMedia.type}-${Date.now()}.${capturedMedia.type === 'photo' ? 'jpg' : videoExtension}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    // If multiple shots were captured, download all of them
+    if (capturedShots.length > 0) {
+      capturedShots.forEach((shot, index) => {
+        const a = document.createElement('a')
+        a.href = shot.url
+        a.download = `photo-${Date.now()}-${index + 1}.jpg`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        // Small delay between downloads to avoid browser blocking
+        if (index < capturedShots.length - 1) {
+          setTimeout(() => {}, 100)
+        }
+      })
+    } else if (capturedMedia) {
+      // Download single media item
+      const videoExtension = capturedMedia.mimeType?.includes('mp4') ? 'mp4' : 'webm'
+      const a = document.createElement('a')
+      a.href = capturedMedia.url
+      a.download = `${capturedMedia.type}-${Date.now()}.${capturedMedia.type === 'photo' ? 'jpg' : videoExtension}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
   }
 
   const toggleFacingMode = () => {
