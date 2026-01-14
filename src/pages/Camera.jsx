@@ -232,10 +232,12 @@ export default function Camera() {
         console.warn('⚠️ CAMERA DEBUG: Could not enumerate devices:', enumError)
       }
 
-      // Wait longer before trying to access camera (gives hardware time to initialize/release)
-      // This is especially important if the camera was recently used by another app
-      console.log('🎥 CAMERA DEBUG: Waiting 500ms before camera access (hardware initialization)')
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // Wait before trying to access camera (gives hardware time to initialize/release)
+      // Shorter delay for localhost, longer for production
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const waitTime = isLocalhost ? 100 : 500
+      console.log(`🎥 CAMERA DEBUG: Waiting ${waitTime}ms before camera access (hardware initialization)`)
+      await new Promise(resolve => setTimeout(resolve, waitTime))
 
       // Try each constraint set until one works
       for (let i = 0; i < tryConstraints.length; i++) {
