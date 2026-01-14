@@ -1146,10 +1146,10 @@ export default function Camera() {
                 title="4 Shots (4 second delay)"
               >
                 <div className="flex flex-wrap gap-0.5 justify-center max-w-[60px]">
-                  <CameraIcon className="h-4 w-4" />
-                  <CameraIcon className="h-4 w-4" />
-                  <CameraIcon className="h-4 w-4" />
-                  <CameraIcon className="h-4 w-4" />
+                  <CameraIcon className="h-8 w-8" />
+                  <CameraIcon className="h-8 w-8" />
+                  <CameraIcon className="h-8 w-8" />
+                  <CameraIcon className="h-8 w-8" />
                 </div>
                 <span className="text-xs">4</span>
               </button>
