@@ -767,8 +767,8 @@ export default function Camera() {
     const shots = []
     const context = canvas.getContext('2d')
 
-    // Determine delay based on shot count: 2 shots = 2 seconds, 3 shots = 3 seconds, 4 shots = 4 seconds
-    const delayBetweenShots = shotCount === 2 ? 2000 : shotCount === 3 ? 3000 : shotCount === 4 ? 4000 : 0
+    // Determine delay based on shot count: 3 seconds between shots for all multi-shot options
+    const delayBetweenShots = shotCount > 1 ? 3000 : 0
 
     try {
       for (let i = 0; i < shotCount; i++) {
@@ -1091,7 +1091,7 @@ export default function Camera() {
         
         {mode === 'photo' ? (
           <div className="space-y-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Select Number of Shots:</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Shots (3 secs):</label>
             <div className="grid grid-cols-4 gap-3">
               <button
                 onClick={() => setShotCount(1)}
