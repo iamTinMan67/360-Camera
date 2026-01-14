@@ -1235,6 +1235,16 @@ export default function Camera() {
 
   return (
     <div className="space-y-6">
+      {/* Back to Home - Top Left */}
+      <div className="flex justify-start">
+        <Link
+          to="/"
+          className="text-purple-600 hover:text-purple-700 text-sm font-semibold"
+        >
+          ← Back to Home
+        </Link>
+      </div>
+
       {/* Countdown Overlay */}
       {isCountingDown && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
@@ -1272,16 +1282,10 @@ export default function Camera() {
         </div>
       )}
       <div className="card">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-center mb-6">
           <h1 className="text-3xl font-bold">
             {mode === 'video' ? '360 Video' : 'Photo Booth'}
           </h1>
-          <Link
-            to="/"
-            className="text-purple-600 hover:text-purple-700 text-sm font-semibold"
-          >
-            ← Back to Home
-          </Link>
         </div>
         
         {mode === 'photo' ? (
@@ -1353,43 +1357,43 @@ export default function Camera() {
         ) : (
           <div className="space-y-4">
             <label className="block text-sm font-semibold text-gray-700">Video Speed:</label>
-            <div className="flex gap-3">
+            <div className="flex gap-3 justify-center">
               <button
                 onClick={() => setVideoSpeed(0.5)}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+                className={`py-3 px-6 rounded-lg font-semibold transition-colors ${
                   videoSpeed === 0.5
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <Turtle className="h-5 w-5" />
+                  <Turtle className="h-10 w-10" />
                   <span className="text-xs">0.5x</span>
                 </div>
               </button>
               <button
                 onClick={() => setVideoSpeed(1.0)}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+                className={`py-3 px-6 rounded-lg font-semibold transition-colors ${
                   videoSpeed === 1.0
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <Gauge className="h-5 w-5" />
+                  <Gauge className="h-10 w-10" />
                   <span className="text-xs">1x</span>
                 </div>
               </button>
               <button
                 onClick={() => setVideoSpeed(2.0)}
-                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-colors ${
+                className={`py-3 px-6 rounded-lg font-semibold transition-colors ${
                   videoSpeed === 2.0
                     ? 'bg-purple-600 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
                 <div className="flex flex-col items-center gap-1">
-                  <Rabbit className="h-5 w-5" />
+                  <Rabbit className="h-10 w-10" />
                   <span className="text-xs">2x</span>
                 </div>
               </button>
