@@ -1235,16 +1235,6 @@ export default function Camera() {
 
   return (
     <div className="space-y-6">
-      {/* Back to Home - Top Left */}
-      <div className="flex justify-start">
-        <Link
-          to="/"
-          className="text-purple-600 hover:text-purple-700 text-sm font-semibold"
-        >
-          ← Back to Home
-        </Link>
-      </div>
-
       {/* Countdown Overlay */}
       {isCountingDown && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
@@ -1282,10 +1272,18 @@ export default function Camera() {
         </div>
       )}
       <div className="card">
-        <div className="flex items-center justify-center mb-6">
-          <h1 className="text-3xl font-bold">
+        <div className="flex items-center justify-between mb-6">
+          <Link
+            to="/"
+            className="text-purple-600 hover:text-purple-700 text-sm font-semibold"
+          >
+            ← Back
+          </Link>
+          <h1 className="text-3xl font-bold text-center flex-1">
             {mode === 'video' ? '360 Video' : 'Photo Booth'}
           </h1>
+          {/* Spacer to balance the back link width */}
+          <div className="w-16" />
         </div>
         
         {mode === 'photo' ? (
