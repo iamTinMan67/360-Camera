@@ -12,7 +12,11 @@ export default function Events() {
   const [showEditModal, setShowEditModal] = useState(null)
   const [showDeviceSelection, setShowDeviceSelection] = useState(false)
   const [pendingEventId, setPendingEventId] = useState(null)
-  const [editFormData, setEditFormData] = useState({ name: '', type: '', date: '' })
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    type: '',
+    date: new Date().toISOString().slice(0, 10) // default to today
+  })
 
   const handleSelectEvent = (eventId) => {
     const event = getEventById(eventId)
@@ -46,16 +50,29 @@ export default function Events() {
   const handleSaveEvent = (e) => {
     e.preventDefault()
     if (showEditModal === 'new') {
-      const newEvent = createEvent(editFormData)
+      const payload = {
+        ...editFormData,
+        // If event type is blank, store as 'other' for consistent styling
+        type: editFormData.type || 'other'
+      }
+      const newEvent = createEvent(payload)
       setCurrentEvent(newEvent)
       // Show device selection modal before navigating
       setPendingEventId(newEvent.id)
       setShowDeviceSelection(true)
     } else {
-      updateEvent(showEditModal, editFormData)
+      const payload = {
+        ...editFormData,
+        type: editFormData.type || 'other'
+      }
+      updateEvent(showEditModal, payload)
     }
     setShowEditModal(null)
-    setEditFormData({ name: '', type: '', date: '' })
+    setEditFormData({
+      name: '',
+      type: '',
+      date: new Date().toISOString().slice(0, 10)
+    })
   }
 
   const getEventTypeColor = (type) => {
@@ -98,19 +115,19 @@ export default function Events() {
           </button>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {events.map(event => (
-            <div key={event.id} className="card hover:shadow-xl transition-shadow">
+            <div key={event.id} className="card hover:shadow-2xl transition-shadow py-6 px-5">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-purple-600 mb-2">{event.name}</h3>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getEventTypeColor(event.type)}`}>
+                  <h3 className="text-2xl font-bold text-purple-700 mb-3">{event.name}</h3>
+                  <div className="flex items-center space-x-3 mb-3">
+                    <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ${getEventTypeColor(event.type)}`}>
                       {event.type}
                     </span>
                   </div>
-                  <div className="flex items-center text-sm text-gray-600 mb-2">
-                    <Calendar className="h-4 w-4 mr-1" />
+                  <div className="flex items-center text-base text-gray-700 mb-3">
+                    <Calendar className="h-5 w-5 mr-2" />
                     {new Date(event.date).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
@@ -145,14 +162,14 @@ export default function Events() {
                 )}
               </div>
 
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                <div className="flex items-center space-x-4">
+              <div className="flex items-center justify-between text-base text-gray-600 mb-5">
+                <div className="flex items-center space-x-6">
                   <span className="flex items-center">
-                    <ImageIcon className="h-4 w-4 mr-1" />
+                    <ImageIcon className="h-5 w-5 mr-2" />
                     {event.media.filter(m => m.type === 'photo').length}
                   </span>
                   <span className="flex items-center">
-                    <Video className="h-4 w-4 mr-1" />
+                    <Video className="h-5 w-5 mr-2" />
                     {event.media.filter(m => m.type === 'video').length}
                   </span>
                 </div>
@@ -235,9 +252,8 @@ export default function Events() {
                   value={editFormData.type}
                   onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-                  required
                 >
-                  <option value="">Select type</option>
+                  <option value="">Optional</option>
                   <option value="wedding">Wedding</option>
                   <option value="birthday">Birthday</option>
                   <option value="anniversary">Anniversary</option>
