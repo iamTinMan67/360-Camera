@@ -237,7 +237,8 @@ export default function Camera() {
             height: { ideal: 1920, max: 2560 },
             frameRate: { ideal: 30, max: 60 }
           },
-          audio: true
+          // Photo booth does not need microphone; requesting audio can cause permission failures on iOS/production.
+          audio: false
         },
         {
           video: {
@@ -246,7 +247,7 @@ export default function Camera() {
             width: { ideal: 1080 },
             height: { ideal: 1440 }
           },
-          audio: true
+          audio: false
         }
       ]
 
@@ -295,8 +296,15 @@ export default function Camera() {
       const tryConstraints = [
         ...(mode === 'video' ? videoConstraints : photoConstraints),
         // fallbacks
-        { video: { facingMode: { ideal: 'user' } }, audio: true },
-        { video: true, audio: true },
+        ...(mode === 'video'
+          ? [
+              // If mic permission is denied, we still want the camera to work (video without audio).
+              { video: { facingMode: { ideal: 'user' } }, audio: false },
+              { video: true, audio: false }
+            ]
+          : []),
+        { video: { facingMode: { ideal: 'user' } }, audio: mode === 'video' },
+        { video: true, audio: mode === 'video' },
         { video: { facingMode: { ideal: 'user' } }, audio: false },
         { video: true, audio: false }
       ]
@@ -340,8 +348,14 @@ export default function Camera() {
             constraint: tryConstraints[i]
           })
           lastError = error
-          // If it's a permission error, don't try other constraints
+          // Permission errors on production are often due to microphone denial (when audio: true).
+          // If this attempt requested audio, try next constraints that don't request audio.
           if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            const requestedAudio = Boolean(tryConstraints[i]?.audio)
+            const hasAudioFalseFallback = tryConstraints.slice(i + 1).some(c => c?.audio === false)
+            if (requestedAudio && hasAudioFalseFallback) {
+              continue
+            }
             throw error
           }
           // If it's NotReadableError or videoinput error and we have more attempts, continue
