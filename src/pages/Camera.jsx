@@ -803,8 +803,11 @@ export default function Camera() {
       await startCountdown(initialCountdown)
 
       for (let i = 0; i < shotCount; i++) {
-        // 3 second countdown before subsequent shots
+        // 2 second delay after first shot, then 3 second countdown before subsequent shots
         if (i > 0) {
+          // Wait 2 seconds after first shot
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          // Then start 3 second countdown
           await startCountdown(delayBetweenShots)
           // Re-check video dimensions after delay
           if (!video.videoWidth || !video.videoHeight) {
@@ -844,6 +847,22 @@ export default function Camera() {
       if (shots.length > 0) {
         setCapturedMedia(shots[0]) // Show first shot as preview
         console.log('Photo capture complete:', shots.length, 'shots')
+        
+        // Automatically download all captured shots
+        setTimeout(() => {
+          shots.forEach((shot, index) => {
+            const a = document.createElement('a')
+            a.href = shot.url
+            a.download = `photo-${Date.now()}-${index + 1}.jpg`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            // Small delay between downloads to avoid browser blocking
+            if (index < shots.length - 1) {
+              setTimeout(() => {}, 100)
+            }
+          })
+        }, 500) // Small delay to ensure UI updates
       } else {
         console.error('No photos captured')
         alert('Failed to capture photo. Please try again.')
@@ -1636,10 +1655,6 @@ export default function Camera() {
 
             {(capturedMedia || capturedShots.length > 0) && (
               <>
-                <button onClick={downloadMedia} className="btn-secondary" disabled={isUploading}>
-                  <Download className="inline-block mr-2 h-5 w-5" />
-                  Download
-                </button>
                 {currentEvent && (
                   <button 
                     onClick={saveMedia} 
