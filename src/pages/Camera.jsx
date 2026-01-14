@@ -12,7 +12,8 @@ export default function Camera() {
   const canvasRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
-  
+  const recordingTimeoutRef = useRef(null)
+
   const [stream, setStream] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
   const [capturedMedia, setCapturedMedia] = useState(null)
@@ -38,6 +39,7 @@ export default function Camera() {
   const [uploadedLinks, setUploadedLinks] = useState([])
   const [copiedLink, setCopiedLink] = useState(null)
   const [videoReady, setVideoReady] = useState(false)
+  const [isLoopRecording, setIsLoopRecording] = useState(false)
   
   const { currentEvent, addMediaToEvent, deviceType } = useEvents()
 
@@ -897,6 +899,53 @@ export default function Camera() {
     return ''
   }
 
+  const MAX_RECORDING_MS = 24000
+
+  const autoSaveVideoAndLoop = async (blob, mimeType, timestamp) => {
+    if (!currentEvent) {
+      console.warn('Loop recording: no current event, skipping auto-save')
+      return
+    }
+
+    const eventId = currentEvent.id
+
+    try {
+      // Create a file for upload
+      const extension = mimeType && mimeType.includes('mp4') ? 'mp4' : 'webm'
+      const file = new File(
+        [blob],
+        `video-${currentEvent.name}-${Date.now()}.${extension}`,
+        { type: mimeType || 'video/webm' }
+      )
+
+      const uploadResult = await uploadToFileIO(file, {
+        maxDownloads: 100,
+        autoDelete: false
+      })
+
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const base64Data = reader.result
+        addMediaToEvent(eventId, {
+          type: 'video',
+          data: base64Data,
+          timestamp,
+          speed: videoSpeed,
+          fileioLink: uploadResult.success ? uploadResult.link : null,
+          fileioKey: uploadResult.success ? uploadResult.key : null
+        })
+      }
+      reader.readAsDataURL(file)
+
+      // After saving, if loop is still enabled, start a new recording
+      if (isLoopRecording) {
+        startRecording()
+      }
+    } catch (error) {
+      console.error('Error in loop auto-save:', error)
+    }
+  }
+
   const startRecording = async () => {
     if (!stream) {
       console.error('Cannot start recording: no stream available')
@@ -965,6 +1014,11 @@ export default function Camera() {
     }
 
     mediaRecorder.onstop = () => {
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current)
+        recordingTimeoutRef.current = null
+      }
+
       console.log('Recording stopped, chunks:', chunksRef.current.length)
       // Use the actual mime type from the recorder, or fallback
       const blobType = recordedMimeType.split(';')[0] || 'video/webm'
@@ -974,14 +1028,21 @@ export default function Camera() {
         size: blob.size,
         type: blob.type
       })
-      setCapturedMedia({
+      const videoData = {
         type: 'video',
         url: url,
         blob: blob,
         timestamp: new Date().toISOString(),
         speed: videoSpeed,
         mimeType: recordedMimeType
-      })
+      }
+
+      setCapturedMedia(videoData)
+
+      // If loop recording is enabled, auto-save and restart
+      if (isLoopRecording) {
+        autoSaveVideoAndLoop(blob, recordedMimeType, videoData.timestamp)
+      }
     }
 
     mediaRecorder.onerror = (event) => {
@@ -994,6 +1055,19 @@ export default function Camera() {
       mediaRecorder.start()
       mediaRecorderRef.current = mediaRecorder
       setIsRecording(true)
+
+      // Enforce max recording duration
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current)
+      }
+      recordingTimeoutRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          console.log('Max recording duration reached, stopping recording')
+          mediaRecorderRef.current.stop()
+          setIsRecording(false)
+        }
+      }, MAX_RECORDING_MS)
+
       console.log('Recording started successfully')
     } catch (error) {
       console.error('Error starting MediaRecorder:', error)
@@ -1005,6 +1079,10 @@ export default function Camera() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop()
       setIsRecording(false)
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current)
+        recordingTimeoutRef.current = null
+      }
     }
   }
 
@@ -1670,23 +1748,46 @@ export default function Camera() {
             {(capturedMedia || capturedShots.length > 0) && (
               <>
                 {currentEvent && (
-                  <button 
-                    onClick={saveMedia} 
-                    className="btn-primary"
-                    disabled={isUploading}
-                  >
-                    {isUploading ? (
-                      <>
-                        <Cloud className="inline-block mr-2 h-5 w-5 animate-pulse" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Cloud className="inline-block mr-2 h-5 w-5" />
-                        Save & Upload
-                      </>
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    <button 
+                      onClick={saveMedia} 
+                      className="btn-primary"
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <>
+                          <Cloud className="inline-block mr-2 h-5 w-5 animate-pulse" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Cloud className="inline-block mr-2 h-5 w-5" />
+                          Save & Upload
+                        </>
+                      )}
+                    </button>
+
+                    {mode === 'video' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!currentEvent) {
+                            alert('Loop recording requires an event. Please select or create an event first.')
+                            return
+                          }
+                          setIsLoopRecording((prev) => !prev)
+                        }}
+                        className={`font-semibold py-2 px-4 rounded-lg border transition-colors ${
+                          isLoopRecording
+                            ? 'bg-green-500 text-white border-green-600'
+                            : 'bg-white text-gray-700 border-gray-300'
+                        }`}
+                      >
+                        <RefreshCw className="inline-block mr-2 h-5 w-5" />
+                        {isLoopRecording ? 'Loop: On (24s max)' : 'Loop: Off (24s max)'}
+                      </button>
                     )}
-                  </button>
+                  </div>
                 )}
               </>
             )}
