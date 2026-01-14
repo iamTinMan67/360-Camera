@@ -1,8 +1,10 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Calendar, Image as ImageIcon, Video, Trash2, Download, X, Share2, Check } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeft, Calendar, Image as ImageIcon, Video, Trash2, Download, X, Share2, Check, QrCode } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
+import { QRCodeCanvas } from 'qrcode.react'
+import { supabase } from '../config/supabase'
 
 export default function EventDetail() {
   const { eventId } = useParams()
@@ -10,8 +12,65 @@ export default function EventDetail() {
   const { isAuthenticated } = useAuth()
   const [selectedMedia, setSelectedMedia] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+  const [qrToken, setQrToken] = useState(null)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [qrError, setQrError] = useState(null)
+  const [showQrModal, setShowQrModal] = useState(false)
 
   const event = getEventById(eventId)
+
+  useEffect(() => {
+    const ensureAccessLink = async () => {
+      if (!eventId || !isAuthenticated) return
+
+      setQrLoading(true)
+      setQrError(null)
+
+      try {
+        // Try to find an existing access link for this event
+        const { data: existing, error: fetchError } = await supabase
+          .from('event_access_links')
+          .select('token')
+          .eq('event_id', eventId)
+          .maybeSingle()
+
+        if (fetchError) {
+          throw fetchError
+        }
+
+        if (existing?.token) {
+          setQrToken(existing.token)
+          return
+        }
+
+        // Create a new access link if none exists
+        const token = crypto.randomUUID()
+
+        const { data: created, error: insertError } = await supabase
+          .from('event_access_links')
+          .insert({
+            event_id: eventId,
+            token
+          })
+          .select('token')
+          .single()
+
+        if (insertError) {
+          throw insertError
+        }
+
+        setQrToken(created.token)
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error creating event access link', error)
+        setQrError('Unable to generate QR access link right now.')
+      } finally {
+        setQrLoading(false)
+      }
+    }
+
+    ensureAccessLink()
+  }, [eventId, isAuthenticated])
 
   if (!event) {
     return (
@@ -105,6 +164,17 @@ export default function EventDetail() {
               </div>
               <div className="text-sm text-gray-600">Videos</div>
             </div>
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={() => setShowQrModal(true)}
+                disabled={qrLoading || !qrToken}
+                className="inline-flex items-center px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <QrCode className="h-5 w-5 mr-2" />
+                {qrLoading ? 'Preparing QR…' : 'Guest QR Access'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -225,6 +295,40 @@ export default function EventDetail() {
             </div>
           )}
         </>
+      )}
+
+      {showQrModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 relative">
+            <button
+              type="button"
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-2xl font-bold mb-4 text-center">Guest Access QR</h2>
+            {qrError ? (
+              <p className="text-red-600 text-center mb-4">{qrError}</p>
+            ) : (
+              <>
+                <div className="flex justify-center mb-4">
+                  {qrToken && (
+                    <QRCodeCanvas
+                      value={`${window.location.origin}/event-access/${qrToken}`}
+                      size={220}
+                      level="H"
+                      includeMargin
+                    />
+                  )}
+                </div>
+                <p className="text-sm text-gray-600 text-center">
+                  Guests can scan this code to view photos and videos for this event.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {showDeleteConfirm && (

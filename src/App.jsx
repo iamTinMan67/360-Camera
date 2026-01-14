@@ -5,6 +5,7 @@ import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import Gallery from './pages/Gallery'
 import Login from './pages/Login'
+import EventAccess from './pages/EventAccess'
 import Layout from './components/Layout'
 import { EventProvider, useEvents } from './context/EventContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -16,6 +17,11 @@ function RouteGuard({ children }) {
   
   // Allow access to login page
   if (location.pathname === '/login') {
+    return children
+  }
+
+  // Allow public access to QR-based event galleries
+  if (location.pathname.startsWith('/event-access/')) {
     return children
   }
   
@@ -46,6 +52,7 @@ function AppRoutes() {
                 <Route path="/camera" element={<Camera />} />
                 <Route path="/events" element={<Events />} />
                 <Route path="/events/:eventId" element={<EventDetail />} />
+                <Route path="/event-access/:token" element={<EventAccess />} />
                 <Route path="/gallery" element={<Gallery />} />
                 <Route path="*" element={<Navigate to="/login" replace />} />
               </Routes>
