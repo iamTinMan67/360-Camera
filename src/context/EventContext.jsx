@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../config/supabase'
 
 const EventContext = createContext()
 
@@ -57,9 +58,36 @@ export function EventProvider({ children }) {
     }
   }, [events])
 
-  const createEvent = (eventData) => {
+  const createEvent = async (eventData) => {
+    const localId = Date.now().toString()
+    
+    // Create event in Supabase first
+    let supabaseEventId = null
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .insert({
+          name: eventData.name,
+          type: eventData.type || 'other',
+          date: eventData.date
+        })
+        .select('id')
+        .single()
+      
+      if (error) {
+        console.error('Error creating event in Supabase:', error)
+        // Continue anyway - event will work locally but QR won't work
+      } else {
+        supabaseEventId = data.id
+      }
+    } catch (error) {
+      console.error('Error syncing event to Supabase:', error)
+      // Continue anyway
+    }
+    
     const newEvent = {
-      id: Date.now().toString(),
+      id: localId,
+      supabaseEventId, // Store Supabase UUID for QR access
       ...eventData,
       createdAt: new Date().toISOString(),
       media: []

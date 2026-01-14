@@ -8,7 +8,7 @@ import { supabase } from '../config/supabase'
 
 export default function EventDetail() {
   const { eventId } = useParams()
-  const { getEventById, deleteMediaFromEvent } = useEvents()
+  const { getEventById, deleteMediaFromEvent, updateEvent } = useEvents()
   const { isAuthenticated } = useAuth()
   const [selectedMedia, setSelectedMedia] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
@@ -21,17 +21,61 @@ export default function EventDetail() {
 
   useEffect(() => {
     const ensureAccessLink = async () => {
-      if (!eventId || !isAuthenticated) return
+      if (!eventId || !isAuthenticated || !event) return
 
       setQrLoading(true)
       setQrError(null)
 
       try {
+        // If event doesn't have a Supabase ID, try to create/find it in Supabase
+        let supabaseEventId = event.supabaseEventId
+        
+        if (!supabaseEventId) {
+          // Try to find existing event in Supabase by name and date
+          const { data: existingEvent, error: findError } = await supabase
+            .from('events')
+            .select('id')
+            .eq('name', event.name)
+            .eq('date', event.date)
+            .limit(1)
+            .maybeSingle()
+          
+          if (findError) {
+            throw new Error(`Failed to check Supabase: ${findError.message}`)
+          }
+          
+          if (existingEvent?.id) {
+            supabaseEventId = existingEvent.id
+            // Update local event with Supabase ID
+            updateEvent(eventId, { supabaseEventId })
+          } else {
+            // Create new event in Supabase
+            const { data: newEvent, error: createError } = await supabase
+              .from('events')
+              .insert({
+                name: event.name,
+                type: event.type || 'other',
+                date: event.date
+              })
+              .select('id')
+              .single()
+            
+            if (createError) {
+              throw new Error(`Failed to create event in Supabase: ${createError.message}`)
+            }
+            
+            supabaseEventId = newEvent.id
+            // Update local event with Supabase ID
+            updateEvent(eventId, { supabaseEventId })
+          }
+        }
+
         // Try to find an existing access link for this event
         const { data: existing, error: fetchError } = await supabase
           .from('event_access_links')
           .select('token')
-          .eq('event_id', eventId)
+          .eq('event_id', supabaseEventId)
+          .limit(1)
           .maybeSingle()
 
         if (fetchError) {
@@ -49,7 +93,7 @@ export default function EventDetail() {
         const { data: created, error: insertError } = await supabase
           .from('event_access_links')
           .insert({
-            event_id: eventId,
+            event_id: supabaseEventId,
             token
           })
           .select('token')
@@ -63,14 +107,14 @@ export default function EventDetail() {
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Error creating event access link', error)
-        setQrError('Unable to generate QR access link right now.')
+        setQrError(`Unable to generate QR access link: ${error.message || 'Unknown error'}`)
       } finally {
         setQrLoading(false)
       }
     }
 
     ensureAccessLink()
-  }, [eventId, isAuthenticated])
+  }, [eventId, isAuthenticated, event])
 
   if (!event) {
     return (

@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Share2, Copy, Check, Turtle, Rabbit, Gauge } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 import { uploadToFileIO, uploadMultipleToFileIO } from '../utils/fileio'
+import { uploadMediaToSupabase } from '../utils/supabaseMedia'
 
 export default function Camera() {
   const [searchParams] = useSearchParams()
@@ -923,6 +924,15 @@ export default function Camera() {
         autoDelete: false
       })
 
+      // Upload to Supabase if event has Supabase ID
+      let supabaseUrl = null
+      if (currentEvent.supabaseEventId) {
+        const supabaseResult = await uploadMediaToSupabase(file, currentEvent.supabaseEventId, 'video')
+        if (supabaseResult.success) {
+          supabaseUrl = supabaseResult.publicUrl
+        }
+      }
+
       const reader = new FileReader()
       reader.onloadend = () => {
         const base64Data = reader.result
@@ -932,7 +942,8 @@ export default function Camera() {
           timestamp,
           speed: videoSpeed,
           fileioLink: uploadResult.success ? uploadResult.link : null,
-          fileioKey: uploadResult.success ? uploadResult.key : null
+          fileioKey: uploadResult.success ? uploadResult.key : null,
+          supabaseUrl: supabaseUrl
         })
       }
       reader.readAsDataURL(file)
@@ -1131,9 +1142,18 @@ export default function Camera() {
         for (let i = 0; i < capturedShots.length; i++) {
           const shot = capturedShots[i]
           const uploadResult = uploadResults[i]
+          const file = files[i]
+          
+          // Upload to Supabase if event has Supabase ID
+          let supabaseUrl = null
+          if (currentEvent.supabaseEventId) {
+            const supabaseResult = await uploadMediaToSupabase(file, currentEvent.supabaseEventId, 'photo')
+            if (supabaseResult.success) {
+              supabaseUrl = supabaseResult.publicUrl
+            }
+          }
           
           // Save to local storage (base64)
-          const file = files[i]
           const reader = new FileReader()
           reader.onloadend = () => {
             const base64Data = reader.result
@@ -1142,7 +1162,8 @@ export default function Camera() {
               data: base64Data,
               timestamp: shot.timestamp,
               fileioLink: uploadResult.success ? uploadResult.link : null,
-              fileioKey: uploadResult.success ? uploadResult.key : null
+              fileioKey: uploadResult.success ? uploadResult.key : null,
+              supabaseUrl: supabaseUrl
             })
           }
           reader.readAsDataURL(file)
@@ -1175,6 +1196,15 @@ export default function Camera() {
           autoDelete: false
         })
 
+        // Upload to Supabase if event has Supabase ID
+        let supabaseUrl = null
+        if (currentEvent.supabaseEventId) {
+          const supabaseResult = await uploadMediaToSupabase(file, currentEvent.supabaseEventId, capturedMedia.type)
+          if (supabaseResult.success) {
+            supabaseUrl = supabaseResult.publicUrl
+          }
+        }
+
         // Save to local storage
         const reader = new FileReader()
         reader.onloadend = () => {
@@ -1185,7 +1215,8 @@ export default function Camera() {
             timestamp: capturedMedia.timestamp,
             speed: capturedMedia.speed,
             fileioLink: uploadResult.success ? uploadResult.link : null,
-            fileioKey: uploadResult.success ? uploadResult.key : null
+            fileioKey: uploadResult.success ? uploadResult.key : null,
+            supabaseUrl: supabaseUrl
           })
         }
         reader.readAsDataURL(file)

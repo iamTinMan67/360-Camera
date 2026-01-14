@@ -21,10 +21,16 @@ export default function EventAccess() {
           .from('event_access_links')
           .select('event_id, expires_at')
           .eq('token', token)
-          .single()
+          .limit(1)
+          .maybeSingle()
 
-        if (accessError || !accessLink) {
-          throw new Error('Invalid or expired access link.')
+        if (accessError) {
+          // Surface the real error (often RLS / missing policy)
+          throw new Error(`Access link lookup failed: ${accessError.message}`)
+        }
+
+        if (!accessLink) {
+          throw new Error('Invalid or expired access link (no match for this token).')
         }
 
         if (accessLink.expires_at && new Date(accessLink.expires_at) < new Date()) {
@@ -38,8 +44,12 @@ export default function EventAccess() {
           .eq('id', accessLink.event_id)
           .single()
 
-        if (eventError || !eventData) {
-          throw new Error('Event not found.')
+        if (eventError) {
+          throw new Error(`Event lookup failed: ${eventError.message}`)
+        }
+
+        if (!eventData) {
+          throw new Error('Event not found (no match for event_id).')
         }
 
         // Fetch media for this event
@@ -50,7 +60,7 @@ export default function EventAccess() {
           .order('created_at', { ascending: false })
 
         if (mediaError) {
-          throw new Error('Unable to load event media.')
+          throw new Error(`Media lookup failed: ${mediaError.message}`)
         }
 
         setEvent(eventData)

@@ -47,7 +47,7 @@ export default function Events() {
     setShowDeleteConfirm(null)
   }
 
-  const handleSaveEvent = (e) => {
+  const handleSaveEvent = async (e) => {
     e.preventDefault()
     if (showEditModal === 'new') {
       const payload = {
@@ -55,7 +55,7 @@ export default function Events() {
         // If event type is blank, store as 'other' for consistent styling
         type: editFormData.type || 'other'
       }
-      const newEvent = createEvent(payload)
+      const newEvent = await createEvent(payload)
       setCurrentEvent(newEvent)
       // Show device selection modal before navigating
       setPendingEventId(newEvent.id)

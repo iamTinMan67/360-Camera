@@ -25,3 +25,6 @@ dist-ssr
 
 # Auth credentials - DO NOT COMMIT
 src/config/auth.js
+.env
+.env.local
+.env.*.local
