@@ -34,6 +34,7 @@ export default function Camera() {
   const [isUploading, setIsUploading] = useState(false)
   const [isCountingDown, setIsCountingDown] = useState(false)
   const [countdownValue, setCountdownValue] = useState(0)
+  const [initialCountdownValue, setInitialCountdownValue] = useState(0)
   const [uploadedLinks, setUploadedLinks] = useState([])
   const [copiedLink, setCopiedLink] = useState(null)
   const [videoReady, setVideoReady] = useState(false)
@@ -1122,9 +1123,6 @@ export default function Camera() {
 
 
   // Calculate progress percentage for circular progress (0-100)
-  // Track the initial countdown value to calculate progress correctly
-  const [initialCountdownValue, setInitialCountdownValue] = useState(0)
-  
   const countdownProgress = isCountingDown && countdownValue > 0 && initialCountdownValue > 0
     ? ((initialCountdownValue - countdownValue) / initialCountdownValue) * 100
     : 0
