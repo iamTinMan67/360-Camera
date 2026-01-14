@@ -518,6 +518,25 @@ export default function Camera() {
     }
   }, [stream])
 
+  // If mode changes (photo <-> video), reset mode-specific state and restart the camera with new constraints.
+  useEffect(() => {
+    // Clear any captured overlay that can make the camera look "frozen"
+    setCapturedMedia(null)
+    setCapturedShots([])
+    setIsRecording(false)
+    setIsLoopRecording(false)
+    setVideoReady(false)
+    setStreamIsLandscape(false)
+
+    // Restart camera to apply the correct constraints for the new mode.
+    // Safari requires user interaction, so we don't auto-start there.
+    stopCamera()
+    if (!isSafari()) {
+      startCamera()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
   // Ensure video plays when stream is set and check when it's ready (important for Safari)
   useEffect(() => {
     console.log('🎥 CAMERA DEBUG: useEffect triggered, stream:', !!stream, 'videoRef:', !!videoRef.current)
