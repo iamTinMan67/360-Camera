@@ -201,7 +201,9 @@ export default function Camera() {
       stream.getTracks().forEach(track => track.stop())
       setStream(null)
       // Wait a moment after cleanup before requesting new stream
-      await new Promise(resolve => setTimeout(resolve, 100))
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      // iOS Safari often needs more time to release the camera between sessions
+      await new Promise(resolve => setTimeout(resolve, isLocalhost ? 150 : 800))
     }
     if (videoRef.current && videoRef.current.srcObject) {
       videoRef.current.srcObject = null
@@ -232,20 +234,18 @@ export default function Camera() {
         {
           video: {
             facingMode: { ideal: 'user' },
-            aspectRatio: { ideal: 3 / 4 }, // portrait
-            width: { ideal: 1440, max: 1920 },
-            height: { ideal: 1920, max: 2560 },
-            frameRate: { ideal: 30, max: 60 }
+            // Avoid strict aspect ratio constraints on iOS Safari; we rotate/crop in UI/canvas as needed.
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1440 }
           },
-          // Photo booth does not need microphone; requesting audio can cause permission failures on iOS/production.
+          // Photo booth does not need microphone; requesting audio can break getUserMedia on iOS/production.
           audio: false
         },
         {
           video: {
             facingMode: { ideal: 'user' },
-            aspectRatio: { ideal: 3 / 4 },
-            width: { ideal: 1080 },
-            height: { ideal: 1440 }
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           },
           audio: false
         }
@@ -256,55 +256,46 @@ export default function Camera() {
         {
           video: {
             facingMode: { ideal: 'user' },
-            aspectRatio: { ideal: 16 / 9 }, // landscape
-            width: { ideal: 1920, max: 3840 },
-            height: { ideal: 1080, max: 2160 },
-            frameRate: { ideal: 60, max: 60 }
-          },
-          audio: true
-        },
-        {
-          video: {
-            facingMode: { ideal: 'user' },
-            aspectRatio: { ideal: 16 / 9 },
-            width: { ideal: 1920, max: 3840 },
-            height: { ideal: 1080, max: 2160 },
-            frameRate: { ideal: 30, max: 60 }
-          },
-          audio: true
-        },
-        {
-          video: {
-            facingMode: { ideal: 'user' },
-            aspectRatio: { ideal: 16 / 9 },
+            // Avoid strict aspect ratio constraints; keep requests conservative for iOS Safari reliability.
             width: { ideal: 1280, max: 1920 },
             height: { ideal: 720, max: 1080 },
-            frameRate: { ideal: 60, max: 60 }
+            frameRate: { ideal: 30, max: 60 }
           },
-          audio: true
+          // Start camera without microphone to reduce "Starting videoinput failed" cases on iOS.
+          // (MediaRecorder may still record video-only; we can add mic later if desired.)
+          audio: false
         },
         {
           video: {
             facingMode: { ideal: 'user' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
           },
-          audio: true
+          audio: false
+        },
+        {
+          video: {
+            facingMode: { ideal: 'user' },
+            width: { ideal: 640, max: 1280 },
+            height: { ideal: 480, max: 720 }
+          },
+          audio: false
+        },
+        {
+          video: {
+            facingMode: { ideal: 'user' },
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: false
         }
       ]
 
       const tryConstraints = [
         ...(mode === 'video' ? videoConstraints : photoConstraints),
         // fallbacks
-        ...(mode === 'video'
-          ? [
-              // If mic permission is denied, we still want the camera to work (video without audio).
-              { video: { facingMode: { ideal: 'user' } }, audio: false },
-              { video: true, audio: false }
-            ]
-          : []),
-        { video: { facingMode: { ideal: 'user' } }, audio: mode === 'video' },
-        { video: true, audio: mode === 'video' },
+        { video: { facingMode: { ideal: 'user' } }, audio: false },
+        { video: true, audio: false },
         { video: { facingMode: { ideal: 'user' } }, audio: false },
         { video: true, audio: false }
       ]
@@ -348,8 +339,8 @@ export default function Camera() {
             constraint: tryConstraints[i]
           })
           lastError = error
-          // Permission errors on production are often due to microphone denial (when audio: true).
-          // If this attempt requested audio, try next constraints that don't request audio.
+          // Permission errors can be caused by microphone denial when audio:true.
+          // If this attempt requested audio, try subsequent constraints that disable audio.
           if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
             const requestedAudio = Boolean(tryConstraints[i]?.audio)
             const hasAudioFalseFallback = tryConstraints.slice(i + 1).some(c => c?.audio === false)
@@ -381,9 +372,19 @@ export default function Camera() {
         // Provide more helpful error message
         const errorMessage = lastError?.message || 'Unknown error'
         if (errorMessage.includes('videoinput') || errorMessage.includes('Starting videoinput')) {
-          throw new Error('Camera hardware initialization failed. The camera may be in use by another application or there may be a driver issue.')
+          // One more conservative retry after a longer delay (helps iOS Safari release the camera)
+          console.warn('⚠️ CAMERA DEBUG: videoinput failed; retrying once with minimal constraints after delay...')
+          await new Promise(resolve => setTimeout(resolve, 1500))
+          try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          } catch (retryErr) {
+            console.error('❌ CAMERA DEBUG: Minimal retry also failed:', retryErr)
+            throw new Error('Camera hardware initialization failed. Please close other apps using the camera and try again.')
+          }
         }
-        throw lastError || new Error('Could not access camera with any constraints')
+        if (!mediaStream) {
+          throw lastError || new Error('Could not access camera with any constraints')
+        }
       }
 
       setStream(mediaStream)
@@ -410,6 +411,10 @@ export default function Camera() {
       if (videoRef.current) {
         const video = videoRef.current
         video.srcObject = mediaStream
+        // Ensure the element is actually visible to the browser's video pipeline (iOS Safari quirk)
+        video.style.display = 'block'
+        video.style.visibility = 'visible'
+        video.style.opacity = '1'
         
         console.log('🎥 CAMERA DEBUG: Video element srcObject set')
         console.log('🎥 CAMERA DEBUG: Video element state:', {
@@ -1592,8 +1597,11 @@ export default function Camera() {
               muted
               className="absolute top-1/2 left-1/2 object-cover"
               style={{ 
-                display: stream ? 'block' : 'none',
-                visibility: stream ? 'visible' : 'hidden',
+                // Keep the video element in the layout even before the stream is ready.
+                // On iOS Safari, display:none can prevent metadata/dimensions from ever populating.
+                display: 'block',
+                visibility: 'visible',
+                opacity: stream ? 1 : 0,
                 width: streamIsLandscape !== (mode === 'video') ? '100vh' : '100vw',
                 height: streamIsLandscape !== (mode === 'video') ? '100vw' : '100vh',
                 transform:
