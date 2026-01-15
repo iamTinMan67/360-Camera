@@ -17,7 +17,8 @@ export default function Layout({ children }) {
   const loginState = undefined
 
   // Camera pages should be truly fullscreen (no sticky nav / constrained main container).
-  if (isCameraPage) {
+  // But during local development, keep the normal layout so it's easier to navigate/debug.
+  if (isCameraPage && !import.meta.env.DEV) {
     return <div className="min-h-screen">{children}</div>
   }
 

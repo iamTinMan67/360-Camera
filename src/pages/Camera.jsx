@@ -41,6 +41,9 @@ export default function Camera() {
   const { isAuthenticated } = useAuth()
 
   const requestFullscreenOrientation = async (orientation) => {
+    // During development, avoid forcing fullscreen/orientation so it's easier to work in the browser.
+    if (import.meta.env.DEV) return
+
     // Best-effort: iOS Safari usually requires a user gesture for fullscreen/orientation lock.
     try {
       if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
@@ -1869,61 +1872,87 @@ export default function Camera() {
             ) : stream ? (
               <>
                 {mode === 'photo' ? (
-                  <button 
-                    onClick={capturePhoto} 
-                    className={`font-semibold py-2 px-4 rounded-lg transition-colors ${
-                      isCapturing || isCountingDown || isUploading || !videoReady
-                        ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                        : 'bg-green-500 hover:bg-green-600 text-white'
-                    }`}
-                    disabled={isCapturing || isCountingDown || isUploading || !videoReady}
-                    title={!videoReady ? 'Waiting for camera to be ready...' : ''}
-                  >
-                    <CameraIcon className="inline-block mr-2 h-5 w-5" />
-                    {isCapturing ? `Capturing ${capturedShots.length + 1}/${shotCount}...` : `Take ${shotCount} Photo${shotCount > 1 ? 's' : ''}`}
-                  </button>
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={capturePhoto}
+                      disabled={isCapturing || isCountingDown || isUploading || !videoReady}
+                      title={!videoReady ? 'Waiting for camera to be ready...' : 'Take photo'}
+                      aria-label="Take photo"
+                      className={`relative h-20 w-20 rounded-full border-4 transition ${
+                        isCapturing || isCountingDown || isUploading || !videoReady
+                          ? 'border-gray-400 cursor-not-allowed opacity-70'
+                          : 'border-white hover:scale-[1.03] active:scale-[0.98]'
+                      }`}
+                      style={{
+                        background:
+                          isCapturing || isCountingDown || isUploading || !videoReady
+                            ? '#9ca3af'
+                            : '#ef4444'
+                      }}
+                    />
+                    <div className="text-sm text-white/90">
+                      {isCapturing
+                        ? `Capturing ${capturedShots.length + 1}/${shotCount}...`
+                        : `Photo (${shotCount})`}
+                    </div>
+                  </div>
                 ) : (
                   <>
                     {!isRecording ? (
-                      <div className="flex flex-wrap gap-3 justify-center">
-                        <button 
-                          onClick={startRecording} 
-                          className={`font-semibold py-2 px-4 rounded-lg transition-colors ${
-                            isCountingDown || isUploading || !videoReady
-                              ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                              : 'bg-green-500 hover:bg-green-600 text-white'
-                          }`}
-                          disabled={isCountingDown || isUploading || !videoReady}
-                          title={!videoReady ? 'Waiting for camera to be ready...' : ''}
-                        >
-                          <Video className="inline-block mr-2 h-5 w-5" />
-                          Record Video
-                        </button>
-
+                      <div className="flex flex-col items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (!currentEvent) {
-                              alert('Loop recording requires an event. Please select or create an event first.')
-                              return
-                            }
-                            setIsLoopRecording((prev) => !prev)
-                          }}
-                          className={`font-semibold py-2 px-4 rounded-lg border transition-colors ${
-                            isLoopRecording
-                              ? 'bg-green-500 text-white border-green-600'
-                              : 'bg-white text-gray-700 border-gray-300'
+                          onClick={startRecording}
+                          disabled={isCountingDown || isUploading || !videoReady}
+                          title={!videoReady ? 'Waiting for camera to be ready...' : 'Start recording'}
+                          aria-label="Start recording"
+                          className={`relative h-20 w-20 rounded-full border-4 transition ${
+                            isCountingDown || isUploading || !videoReady
+                              ? 'border-gray-400 cursor-not-allowed opacity-70'
+                              : 'border-white hover:scale-[1.03] active:scale-[0.98]'
                           }`}
-                        >
-                          <RefreshCw className="inline-block mr-2 h-5 w-5" />
-                          {isLoopRecording ? 'Loop: On (24s max)' : 'Start Loop (24s max)'}
-                        </button>
+                          style={{
+                            background:
+                              isCountingDown || isUploading || !videoReady ? '#9ca3af' : '#ef4444'
+                          }}
+                        />
+
+                        <div className="flex flex-wrap gap-3 justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!currentEvent) {
+                                alert('Loop recording requires an event. Please select or create an event first.')
+                                return
+                              }
+                              setIsLoopRecording((prev) => !prev)
+                            }}
+                            className={`font-semibold py-2 px-4 rounded-lg border transition-colors ${
+                              isLoopRecording
+                                ? 'bg-green-500 text-white border-green-600'
+                                : 'bg-white text-gray-700 border-gray-300'
+                            }`}
+                          >
+                            <RefreshCw className="inline-block mr-2 h-5 w-5" />
+                            {isLoopRecording ? 'Loop: On (24s max)' : 'Start Loop (24s max)'}
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <button onClick={stopRecording} className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg">
-                        <Square className="inline-block mr-2 h-5 w-5" />
-                        Stop Recording
-                      </button>
+                      <div className="flex flex-col items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={stopRecording}
+                          aria-label="Stop recording"
+                          className="relative h-20 w-20 rounded-full border-4 border-white bg-[#ef4444] transition hover:scale-[1.03] active:scale-[0.98]"
+                        >
+                          <span className="absolute inset-0 flex items-center justify-center">
+                            <span className="h-7 w-7 bg-white rounded-sm" />
+                          </span>
+                        </button>
+                        <div className="text-sm text-white/90">Recording…</div>
+                      </div>
                     )}
                   </>
                 )}
