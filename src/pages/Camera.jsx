@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useSearchParams, Link, useLocation } from 'react-router-dom'
+import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Turtle, Rabbit, Gauge } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
@@ -10,6 +10,7 @@ export default function Camera() {
   const [searchParams] = useSearchParams()
   const mode = searchParams.get('mode') || 'photo' // 'photo' or 'video'
   const location = useLocation()
+  const navigate = useNavigate()
   
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -56,6 +57,14 @@ export default function Camera() {
     } catch {
       // ignore
     }
+  }
+
+  const handleExit = () => {
+    if (!isAuthenticated) {
+      navigate('/login?next=/events', { state: { backgroundLocation: location } })
+      return
+    }
+    navigate('/')
   }
 
   // Detect Safari browser
