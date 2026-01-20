@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../config/supabase'
+import { useAuth } from './AuthContext'
 
 const EventContext = createContext()
 
@@ -14,20 +15,14 @@ export function useEvents() {
 export function EventProvider({ children }) {
   const [events, setEvents] = useState([])
   const [currentEvent, setCurrentEvent] = useState(null)
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
 
-  // Load events and current event from localStorage on mount
+  const EVENTS_CACHE_KEY = 'events_cache_v1'
+  const CURRENT_EVENT_KEY = 'currentEvent_v1'
+
+  // Load current event from localStorage on mount (kiosk flow depends on this)
   useEffect(() => {
-    const savedEvents = localStorage.getItem('events')
-    if (savedEvents) {
-      try {
-        const parsedEvents = JSON.parse(savedEvents)
-        setEvents(parsedEvents)
-      } catch (error) {
-        console.error('Error loading events:', error)
-      }
-    }
-    
-    const savedCurrentEvent = localStorage.getItem('currentEvent')
+    const savedCurrentEvent = localStorage.getItem(CURRENT_EVENT_KEY)
     if (savedCurrentEvent) {
       try {
         setCurrentEvent(JSON.parse(savedCurrentEvent))
@@ -40,24 +35,82 @@ export function EventProvider({ children }) {
   // Save current event to localStorage whenever it changes
   useEffect(() => {
     if (currentEvent) {
-      localStorage.setItem('currentEvent', JSON.stringify(currentEvent))
+      localStorage.setItem(CURRENT_EVENT_KEY, JSON.stringify(currentEvent))
     } else {
-      localStorage.removeItem('currentEvent')
+      localStorage.removeItem(CURRENT_EVENT_KEY)
     }
   }, [currentEvent])
 
-  // Save events to localStorage whenever they change
-  useEffect(() => {
-    if (events.length > 0) {
-      localStorage.setItem('events', JSON.stringify(events))
+  const cacheEvents = useCallback((nextEvents) => {
+    try {
+      localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(nextEvents || []))
+    } catch (e) {
+      console.warn('Failed to cache events:', e)
     }
-  }, [events])
+  }, [])
+
+  const loadEventsFromCache = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(EVENTS_CACHE_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : []
+    } catch (e) {
+      console.warn('Failed to load cached events:', e)
+      return []
+    }
+  }, [])
+
+  const normalizeSupabaseEvent = (row) => ({
+    id: row.id, // use Supabase UUID as primary ID
+    supabaseEventId: row.id,
+    name: row.name,
+    type: row.type || 'other',
+    date: row.date,
+    createdAt: row.created_at || new Date().toISOString(),
+    // Media is stored in Supabase `media` table; keep empty array here to avoid UI crashes.
+    media: []
+  })
+
+  const loadEventsFromSupabase = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('events')
+      .select('id,name,type,date,created_at')
+      .order('date', { ascending: false })
+
+    if (error) throw error
+    return (data || []).map(normalizeSupabaseEvent)
+  }, [])
+
+  // Keep events list Supabase-primary for admins; cache to localStorage as fallback.
+  useEffect(() => {
+    if (authLoading) return
+
+    const run = async () => {
+      if (!isAuthenticated) {
+        // Non-admin should not see event list; keep currentEvent for kiosk capture.
+        setEvents([])
+        return
+      }
+
+      try {
+        const supaEvents = await loadEventsFromSupabase()
+        setEvents(supaEvents)
+        cacheEvents(supaEvents)
+      } catch (e) {
+        console.warn('Failed to load events from Supabase; using cached fallback.', e)
+        const cached = loadEventsFromCache()
+        setEvents(cached)
+      }
+    }
+
+    run()
+  }, [authLoading, isAuthenticated, loadEventsFromSupabase, cacheEvents, loadEventsFromCache])
 
   const createEvent = async (eventData) => {
     const localId = Date.now().toString()
-    
-    // Create event in Supabase first
-    let supabaseEventId = null
+
+    // Supabase-primary: create in Supabase first.
     try {
       const { data, error } = await supabase
         .from('events')
@@ -70,39 +123,94 @@ export function EventProvider({ children }) {
         .single()
       
       if (error) {
-        console.error('Error creating event in Supabase:', error)
-        // Continue anyway - event will work locally but QR won't work
-      } else {
-        supabaseEventId = data.id
+        throw error
       }
+
+      const newEvent = {
+        id: data.id,
+        supabaseEventId: data.id,
+        ...eventData,
+        createdAt: new Date().toISOString(),
+        media: []
+      }
+
+      setEvents(prev => {
+        const next = [...prev, newEvent]
+        cacheEvents(next)
+        return next
+      })
+      return newEvent
     } catch (error) {
-      console.error('Error syncing event to Supabase:', error)
-      // Continue anyway
+      console.error('Error creating event in Supabase (fallback to local cache):', error)
     }
-    
+
+    // Fallback: local-only event (won't be visible cross-browser until created in Supabase)
     const newEvent = {
       id: localId,
-      supabaseEventId, // Store Supabase UUID for QR access
+      supabaseEventId: null,
       ...eventData,
       createdAt: new Date().toISOString(),
-      media: []
+      media: [],
+      localOnly: true
     }
-    setEvents(prev => [...prev, newEvent])
+    setEvents(prev => {
+      const next = [...prev, newEvent]
+      cacheEvents(next)
+      return next
+    })
     return newEvent
   }
 
   const updateEvent = (eventId, updates) => {
-    setEvents(prev =>
-      prev.map(event =>
+    setEvents(prev => {
+      const next = prev.map(event =>
         event.id === eventId ? { ...event, ...updates } : event
       )
-    )
+      cacheEvents(next)
+      return next
+    })
+
+    // Best-effort sync to Supabase if this event has a Supabase ID and admin is logged in
+    const target = events.find(e => e.id === eventId)
+    const supabaseId = target?.supabaseEventId
+    if (isAuthenticated && supabaseId) {
+      supabase
+        .from('events')
+        .update({
+          name: updates.name,
+          type: updates.type,
+          date: updates.date
+        })
+        .eq('id', supabaseId)
+        .then(({ error }) => {
+          if (error) console.error('Supabase event update failed:', error)
+        })
+    }
   }
 
   const deleteEvent = (eventId) => {
-    setEvents(prev => prev.filter(event => event.id !== eventId))
+    const target = events.find(e => e.id === eventId)
+    const supabaseId = target?.supabaseEventId
+
+    setEvents(prev => {
+      const next = prev.filter(event => event.id !== eventId)
+      cacheEvents(next)
+      return next
+    })
+
     if (currentEvent?.id === eventId) {
       setCurrentEvent(null)
+    }
+
+    // Best-effort delete in Supabase (admin only)
+    if (isAuthenticated && supabaseId) {
+      supabase
+        .from('events')
+        .delete()
+        .eq('id', supabaseId)
+        .then(({ error }) => {
+          if (error) console.error('Supabase event delete failed:', error)
+        })
     }
   }
 

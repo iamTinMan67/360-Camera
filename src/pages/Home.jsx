@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Camera, Video, Image as ImageIcon, ArrowRight } from 'lucide-react'
+import { Camera, Video, ArrowRight } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 
 export default function Home() {
@@ -24,9 +24,6 @@ export default function Home() {
         <h1 className="text-5xl font-bold text-purple-600">
           {currentEvent.name}
         </h1>
-        <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-          Choose your mode to start capturing photos and videos
-        </p>
       </div>
 
       {/* Navigation Cards */}
@@ -42,18 +39,9 @@ export default function Home() {
             </div>
             <div>
               <h2 className="text-3xl font-bold text-purple-600 mb-2">Photo Booth</h2>
-              <p className="text-gray-600 mb-4">
-                Capture stunning photos with your device camera. High-quality images saved instantly.
-              </p>
               <div className="flex items-center justify-center text-purple-600 font-semibold group-hover:text-purple-700">
                 <span className="mr-2">Get Started</span>
                 <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-            <div className="pt-4 border-t border-gray-200">
-              <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
-                <ImageIcon className="h-4 w-4" />
-                <span>Photo Capture</span>
               </div>
             </div>
           </div>
@@ -70,18 +58,9 @@ export default function Home() {
             </div>
             <div>
               <h2 className="text-3xl font-bold text-purple-600 mb-2">360</h2>
-              <p className="text-gray-600 mb-4">
-                Record memorable videos of your events. Perfect for capturing special moments in motion.
-              </p>
               <div className="flex items-center justify-center text-purple-600 font-semibold group-hover:text-purple-700">
                 <span className="mr-2">Get Started</span>
                 <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-            <div className="pt-4 border-t border-gray-200">
-              <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
-                <Video className="h-4 w-4" />
-                <span>Video Recording</span>
               </div>
             </div>
           </div>

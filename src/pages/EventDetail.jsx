@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Calendar, Image as ImageIcon, Video, Trash2, Download, X, Share2, Check, QrCode } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import JSZip from 'jszip'
 import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -17,6 +18,8 @@ export default function EventDetail() {
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState(null)
   const [showQrModal, setShowQrModal] = useState(false)
+  const [zipDownloading, setZipDownloading] = useState(false)
+  const [zipProgress, setZipProgress] = useState({ done: 0, total: 0 })
 
   const event = getEventById(eventId)
 
@@ -136,6 +139,71 @@ export default function EventDetail() {
     document.body.removeChild(link)
   }
 
+  const downloadAllMediaZip = async () => {
+    if (!isAuthenticated) {
+      alert('Admin login required to download all media.')
+      return
+    }
+
+    const mediaWithUrls = (event.media || []).filter((m) => m.supabaseUrl)
+    if (mediaWithUrls.length === 0) {
+      alert('No uploaded media (Supabase URLs) found for this event.')
+      return
+    }
+
+    const safe = (s) => String(s || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
+    const getExtFromUrl = (url, fallback) => {
+      try {
+        const path = new URL(url).pathname
+        const last = path.split('/').pop() || ''
+        const dot = last.lastIndexOf('.')
+        if (dot > -1 && dot < last.length - 1) return last.slice(dot + 1)
+      } catch {
+        // ignore
+      }
+      return fallback
+    }
+
+    setZipDownloading(true)
+    setZipProgress({ done: 0, total: mediaWithUrls.length })
+
+    try {
+      const zip = new JSZip()
+      const folderName = safe(event.name) || 'event'
+      const folder = zip.folder(folderName) || zip
+
+      for (let i = 0; i < mediaWithUrls.length; i++) {
+        const m = mediaWithUrls[i]
+        const ext = getExtFromUrl(m.supabaseUrl, m.type === 'photo' ? 'jpg' : 'webm')
+        const filename = `${String(i + 1).padStart(3, '0')}-${m.type}.${ext}`
+
+        const resp = await fetch(m.supabaseUrl)
+        if (!resp.ok) {
+          throw new Error(`Failed to fetch ${filename} (${resp.status})`)
+        }
+        const blob = await resp.blob()
+        folder.file(filename, blob)
+        setZipProgress({ done: i + 1, total: mediaWithUrls.length })
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const zipUrl = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      a.href = zipUrl
+      a.download = `${safe(event.name) || 'event'}-media.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(zipUrl)
+    } catch (err) {
+      console.error('Bulk download failed:', err)
+      alert(`Bulk download failed: ${err.message || err}`)
+    } finally {
+      setZipDownloading(false)
+      setZipProgress({ done: 0, total: 0 })
+    }
+  }
+
   const getEventTypeColor = (type) => {
     const colors = {
       wedding: 'bg-pink-100 text-pink-700',
@@ -187,15 +255,30 @@ export default function EventDetail() {
               <div className="text-sm text-gray-600">Videos</div>
             </div>
             {isAuthenticated && (
-              <button
-                type="button"
-                onClick={() => setShowQrModal(true)}
-                disabled={qrLoading || !qrToken}
-                className="inline-flex items-center px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <QrCode className="h-5 w-5 mr-2" />
-                {qrLoading ? 'Preparing QR…' : 'Guest QR Access'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={downloadAllMediaZip}
+                  disabled={zipDownloading}
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Download all uploaded media as a ZIP"
+                >
+                  <Download className="h-5 w-5 mr-2" />
+                  {zipDownloading
+                    ? `Zipping… ${zipProgress.done}/${zipProgress.total}`
+                    : 'Download all (ZIP)'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowQrModal(true)}
+                  disabled={qrLoading || !qrToken}
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <QrCode className="h-5 w-5 mr-2" />
+                  {qrLoading ? 'Preparing QR…' : 'Guest QR Access'}
+                </button>
+              </>
             )}
           </div>
         </div>

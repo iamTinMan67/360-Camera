@@ -424,7 +424,7 @@ export default function Events() {
                 onClick={() => handleSelectEvent(event.id)}
                 className="block w-full btn-primary text-center"
               >
-                Select Event
+                Select App
               </button>
             </div>
           ))}

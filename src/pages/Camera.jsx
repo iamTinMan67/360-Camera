@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Camera as CameraIcon, Video, Square, Download, X, AlertCircle, RefreshCw, Cloud, Turtle, Rabbit, Gauge } from 'lucide-react'
+import { Camera as CameraIcon, Video, Square, X, AlertCircle, RefreshCw, Cloud, Turtle, Rabbit, Gauge } from 'lucide-react'
 import { useEvents } from '../context/EventContext'
 import { useAuth } from '../context/AuthContext'
 import { uploadMediaToSupabase } from '../utils/supabaseMedia'
@@ -17,6 +17,7 @@ export default function Camera() {
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
   const recordingTimeoutRef = useRef(null)
+  const videoAutoOpenWindowRef = useRef(null)
 
   const [stream, setStream] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -25,9 +26,10 @@ export default function Camera() {
   const [facingMode] = useState('user')
   const [cameraError, setCameraError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [shotCount, setShotCount] = useState(1) // 1, 2, 3, or 4 shots
+  const [shotCount, setShotCount] = useState(1) // 1, 2, or 3 shots
   const [videoSpeed, setVideoSpeed] = useState(1.0) // 0.5 (slow-mo), 1.0 (normal), 2.0 (fast)
   const [capturedShots, setCapturedShots] = useState([])
+  const [previewIndex, setPreviewIndex] = useState(0)
   const [isCapturing, setIsCapturing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isCountingDown, setIsCountingDown] = useState(false)
@@ -35,6 +37,9 @@ export default function Camera() {
   const [initialCountdownValue, setInitialCountdownValue] = useState(0)
   const [videoReady, setVideoReady] = useState(false)
   const [streamIsLandscape, setStreamIsLandscape] = useState(false)
+  const [viewportIsLandscape, setViewportIsLandscape] = useState(
+    typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : false
+  )
   const [isLoopRecording, setIsLoopRecording] = useState(false)
   
   const { currentEvent, addMediaToEvent, updateEvent } = useEvents()
@@ -70,6 +75,23 @@ export default function Camera() {
     navigate('/')
   }
 
+  const triggerDownload = (url, filename) => {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.rel = 'noopener'
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    // Use the simplest, most compatible path first.
+    try {
+      a.click()
+    } catch {
+      // Fallback for stricter environments.
+      a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+    }
+    document.body.removeChild(a)
+  }
+
   // Detect Safari browser
   const isSafari = () => {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || 
@@ -80,6 +102,64 @@ export default function Camera() {
   const isMobile = () => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
            (navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform))
+  }
+
+  const discardCapture = () => {
+    try {
+      if (capturedShots?.length) {
+        capturedShots.forEach((s) => {
+          if (s?.url) URL.revokeObjectURL(s.url)
+        })
+      } else if (capturedMedia?.url) {
+        URL.revokeObjectURL(capturedMedia.url)
+      }
+    } catch {
+      // ignore
+    }
+
+    setCapturedShots([])
+    setCapturedMedia(null)
+    setPreviewIndex(0)
+  }
+
+  const handleSaveUploadAndDownload = async () => {
+    // Option 1: Always download even if upload fails.
+    // Download first so we don't lose blob URLs if upload code clears state.
+    try {
+      if (capturedShots.length > 0) {
+        for (let i = 0; i < capturedShots.length; i++) {
+          const shot = capturedShots[i]
+          if (!shot?.url) continue
+          triggerDownload(shot.url, `photo-${Date.now()}-${i + 1}.jpg`)
+          // Small delay between downloads (some browsers throttle)
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 150))
+        }
+      } else if (capturedMedia?.url) {
+        const ext =
+          capturedMedia.type === 'photo'
+            ? 'jpg'
+            : capturedMedia.mimeType?.includes('mp4')
+              ? 'mp4'
+              : 'webm'
+        const filename = `${capturedMedia.type}-${Date.now()}.${ext}`
+        triggerDownload(capturedMedia.url, filename)
+
+        // Firefox often ignores programmatic download for video/webm; open the blob so user can "Save Video As…"
+        if (capturedMedia.type === 'video' && /firefox/i.test(navigator.userAgent)) {
+          window.open(capturedMedia.url, '_blank', 'noopener,noreferrer')
+        }
+      }
+    } catch (err) {
+      console.error('Download step failed:', err)
+    }
+
+    try {
+      await saveMedia()
+    } catch (err) {
+      console.error('Upload step failed:', err)
+      alert('Upload failed, but the file(s) were downloaded locally.')
+    }
   }
 
   // Detect if device has multiple cameras (for better camera selection)
@@ -265,6 +345,18 @@ export default function Camera() {
 
       const videoConstraints = [
         // iPhone 16 Pro Max front camera, prefer landscape 16:9 (video)
+        // Try with microphone first (some browsers require an audio track for MediaRecorder to work reliably).
+        // If mic permission is denied, we'll fall back to the audio:false constraints below.
+        {
+          video: {
+            facingMode: { ideal: 'user' },
+            // Avoid strict aspect ratio constraints; keep requests conservative for iOS Safari reliability.
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 60 }
+          },
+          audio: true
+        },
         {
           video: {
             facingMode: { ideal: 'user' },
@@ -550,6 +642,22 @@ export default function Camera() {
       }
     }
   }, [stream])
+
+  // Track viewport orientation so the preview is always upright on-screen (especially in DEV where we don't lock orientation).
+  useEffect(() => {
+    const updateViewportOrientation = () => {
+      setViewportIsLandscape(window.innerWidth > window.innerHeight)
+    }
+
+    updateViewportOrientation()
+    window.addEventListener('resize', updateViewportOrientation)
+    window.addEventListener('orientationchange', updateViewportOrientation)
+
+    return () => {
+      window.removeEventListener('resize', updateViewportOrientation)
+      window.removeEventListener('orientationchange', updateViewportOrientation)
+    }
+  }, [])
 
   // If mode changes (photo <-> video), reset mode-specific state and restart the camera with new constraints.
   useEffect(() => {
@@ -864,18 +972,29 @@ export default function Camera() {
           }
         }
         
-        // Force portrait output for iPad front camera
         const vw = video.videoWidth
         const vh = video.videoHeight
         const landscape = vw > vh
 
-        if (landscape) {
-          // Rotate 90deg clockwise into portrait canvas
+        // Keep saved photo orientation consistent with the on-screen preview.
+        const desiredLandscape = viewportIsLandscape
+        const needsRotation = landscape !== desiredLandscape
+
+        if (needsRotation) {
           canvas.width = vh
           canvas.height = vw
           context.save()
-          context.translate(canvas.width, 0)
-          context.rotate(Math.PI / 2)
+
+          if (desiredLandscape) {
+            // portrait stream -> landscape output (rotate clockwise)
+            context.translate(canvas.width, 0)
+            context.rotate(Math.PI / 2)
+          } else {
+            // landscape stream -> portrait output (rotate counter-clockwise)
+            context.translate(0, canvas.height)
+            context.rotate(-Math.PI / 2)
+          }
+
           context.drawImage(video, 0, 0, vw, vh)
           context.restore()
         } else {
@@ -910,23 +1029,8 @@ export default function Camera() {
       setCapturedShots(shots)
       if (shots.length > 0) {
         setCapturedMedia(shots[0]) // Show first shot as preview
+        setPreviewIndex(0)
         console.log('Photo capture complete:', shots.length, 'shots')
-        
-        // Automatically download all captured shots
-        setTimeout(() => {
-          shots.forEach((shot, index) => {
-            const a = document.createElement('a')
-            a.href = shot.url
-            a.download = `photo-${Date.now()}-${index + 1}.jpg`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            // Small delay between downloads to avoid browser blocking
-            if (index < shots.length - 1) {
-              setTimeout(() => {}, 100)
-            }
-          })
-        }, 500) // Small delay to ensure UI updates
       } else {
         console.error('No photos captured')
         alert('Failed to capture photo. Please try again.')
@@ -1055,6 +1159,22 @@ export default function Camera() {
       return
     }
 
+    // iOS/iPadOS blocks popups/downloads triggered from async callbacks.
+    // Pre-open the "save" tab *synchronously* on the user's tap, so onstop can navigate it later
+    // (this also covers auto-stop via MAX_RECORDING_MS where the user didn't tap Stop).
+    if (isMobile()) {
+      try {
+        // Avoid noopener here; we need the Window reference to set location.href later on iOS.
+        videoAutoOpenWindowRef.current = window.open('about:blank', '_blank')
+        if (videoAutoOpenWindowRef.current) {
+          // best-effort harden
+          videoAutoOpenWindowRef.current.opener = null
+        }
+      } catch {
+        videoAutoOpenWindowRef.current = null
+      }
+    }
+
     // If there's already a captured video, discard it
     if (capturedMedia) {
       setCapturedMedia(null)
@@ -1141,19 +1261,6 @@ export default function Camera() {
 
       setCapturedMedia(videoData)
 
-      // Auto-download recorded video for user convenience (similar to photo auto-download)
-      try {
-        const videoExtension = recordedMimeType?.includes('mp4') ? 'mp4' : 'webm'
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `video-${Date.now()}.${videoExtension}`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-      } catch (downloadError) {
-        console.error('Automatic video download failed:', downloadError)
-      }
-
       // If loop recording is enabled, auto-save and restart
       if (isLoopRecording) {
         autoSaveVideoAndLoop(blob, recordedMimeType, videoData.timestamp)
@@ -1198,6 +1305,151 @@ export default function Camera() {
         clearTimeout(recordingTimeoutRef.current)
         recordingTimeoutRef.current = null
       }
+    }
+  }
+
+  const ensureSupabaseEventId = async () => {
+    if (!currentEvent) return null
+
+    let supabaseEventId = currentEvent.supabaseEventId
+    if (supabaseEventId) return supabaseEventId
+
+    try {
+      const { data: existingEvent, error: findError } = await supabase
+        .from('events')
+        .select('id')
+        .eq('name', currentEvent.name)
+        .eq('date', currentEvent.date)
+        .limit(1)
+        .maybeSingle()
+
+      if (findError) {
+        console.error('Error checking for existing event:', findError)
+      }
+
+      if (existingEvent?.id) {
+        supabaseEventId = existingEvent.id
+        updateEvent(currentEvent.id, { supabaseEventId })
+        return supabaseEventId
+      }
+
+      const { data: newEvent, error: createError } = await supabase
+        .from('events')
+        .insert({
+          name: currentEvent.name,
+          type: currentEvent.type || 'other',
+          date: currentEvent.date
+        })
+        .select('id')
+        .single()
+
+      if (createError) {
+        console.error('Failed to create event in Supabase:', createError)
+        return null
+      }
+
+      supabaseEventId = newEvent?.id || null
+      if (supabaseEventId) {
+        updateEvent(currentEvent.id, { supabaseEventId })
+      }
+      return supabaseEventId
+    } catch (err) {
+      console.error('ensureSupabaseEventId failed:', err)
+      return null
+    }
+  }
+
+  const autoUploadPhotos = async (shots) => {
+    if (!currentEvent || !shots?.length) return
+
+    setIsUploading(true)
+    try {
+      const supabaseEventId = await ensureSupabaseEventId()
+      if (!supabaseEventId) return
+
+      const eventId = currentEvent.id
+
+      for (let i = 0; i < shots.length; i++) {
+        const shot = shots[i]
+        const file = new File(
+          [shot.blob],
+          `photo-${currentEvent.name}-${Date.now()}-${i + 1}.jpg`,
+          { type: 'image/jpeg' }
+        )
+
+        let supabaseUrl = null
+        const supabaseResult = await uploadMediaToSupabase(file, supabaseEventId, 'photo')
+        if (supabaseResult.success) {
+          supabaseUrl = supabaseResult.publicUrl
+        } else {
+          console.error(`Auto-upload failed (photo ${i + 1}):`, supabaseResult.error, supabaseResult.details)
+        }
+
+        // Save to local storage (base64) so it appears in the app gallery, even if upload fails.
+        await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            addMediaToEvent(eventId, {
+              type: 'photo',
+              data: reader.result,
+              timestamp: shot.timestamp,
+              supabaseUrl
+            })
+            resolve()
+          }
+          reader.readAsDataURL(file)
+        })
+      }
+    } catch (err) {
+      console.error('Auto-upload photos failed:', err)
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const autoUploadVideo = async (videoData) => {
+    if (!currentEvent || !videoData?.blob) return
+
+    setIsUploading(true)
+    try {
+      const supabaseEventId = await ensureSupabaseEventId()
+      if (!supabaseEventId) return
+
+      const eventId = currentEvent.id
+      const mimeType = videoData.mimeType || 'video/webm'
+      const extension = mimeType.includes('mp4') ? 'mp4' : 'webm'
+      const file = new File(
+        [videoData.blob],
+        `video-${currentEvent.name}-${Date.now()}.${extension}`,
+        { type: mimeType }
+      )
+
+      let supabaseUrl = null
+      const supabaseResult = await uploadMediaToSupabase(file, supabaseEventId, 'video')
+      if (supabaseResult.success) {
+        supabaseUrl = supabaseResult.publicUrl
+      } else {
+        console.error('Auto-upload failed (video):', supabaseResult.error, supabaseResult.details)
+      }
+
+      await new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          addMediaToEvent(eventId, {
+            type: 'video',
+            data: reader.result,
+            timestamp: videoData.timestamp,
+            speed: videoData.speed,
+            supabaseUrl
+          })
+          resolve()
+        }
+        reader.readAsDataURL(file)
+      })
+    } catch (err) {
+      console.error('Auto-upload video failed:', err)
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -1365,33 +1617,6 @@ export default function Camera() {
     }
   }
 
-  const downloadMedia = () => {
-    // If multiple shots were captured, download all of them
-    if (capturedShots.length > 0) {
-      capturedShots.forEach((shot, index) => {
-        const a = document.createElement('a')
-        a.href = shot.url
-        a.download = `photo-${Date.now()}-${index + 1}.jpg`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        // Small delay between downloads to avoid browser blocking
-        if (index < capturedShots.length - 1) {
-          setTimeout(() => {}, 100)
-        }
-      })
-    } else if (capturedMedia) {
-      // Download single media item
-      const videoExtension = capturedMedia.mimeType?.includes('mp4') ? 'mp4' : 'webm'
-      const a = document.createElement('a')
-      a.href = capturedMedia.url
-      a.download = `${capturedMedia.type}-${Date.now()}.${capturedMedia.type === 'photo' ? 'jpg' : videoExtension}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    }
-  }
-
   // Device is fixed (iPad A16) using the front camera; no toggle.
 
 
@@ -1471,120 +1696,6 @@ export default function Camera() {
           </div>
         </div>
       )}
-      <div className="card absolute top-4 left-4 right-4 z-50 max-h-[38vh] overflow-auto bg-white/85 backdrop-blur-lg">
-        {mode === 'photo' ? (
-          <div className="space-y-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Shots (3 secs):</label>
-            <div className="grid grid-cols-4 gap-3">
-              <button
-                onClick={() => setShotCount(1)}
-                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-2 ${
-                  shotCount === 1
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-                title="1 Shot"
-              >
-                <CameraIcon className="h-8 w-8" />
-                <span className="text-xs">1</span>
-              </button>
-              <button
-                onClick={() => setShotCount(2)}
-                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-1 ${
-                  shotCount === 2
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-                title="2 Shots (3 second delay)"
-              >
-                <div className="relative w-10 h-10 flex items-center justify-center">
-                  <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
-                  <CameraIcon className="h-10 w-10 absolute top-1 left-1" />
-                </div>
-                <span className="text-xs">2</span>
-              </button>
-              <button
-                onClick={() => setShotCount(3)}
-                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-1 ${
-                  shotCount === 3
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-                title="3 Shots (3 second delay)"
-              >
-                <div className="relative w-10 h-10 flex items-center justify-center">
-                  <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
-                  <CameraIcon className="h-10 w-10 absolute top-1 left-1" />
-                  <CameraIcon className="h-10 w-10 absolute top-2 left-2" />
-                </div>
-                <span className="text-xs">3</span>
-              </button>
-              <button
-                onClick={() => setShotCount(4)}
-                className={`py-4 px-4 rounded-lg font-semibold transition-colors flex flex-col items-center justify-center gap-1 ${
-                  shotCount === 4
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-                title="4 Shots (3 second delay)"
-              >
-                <div className="relative w-10 h-10 flex items-center justify-center">
-                  <CameraIcon className="h-10 w-10 absolute top-0 left-0" />
-                  <CameraIcon className="h-10 w-10 absolute top-1 left-1" />
-                  <CameraIcon className="h-10 w-10 absolute top-2 left-2" />
-                  <CameraIcon className="h-10 w-10 absolute top-3 left-3" />
-                </div>
-                <span className="text-xs">4</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <label className="block text-sm font-semibold text-gray-700">Video Speed:</label>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => setVideoSpeed(0.5)}
-                className={`py-3 px-6 rounded-lg font-semibold transition-colors ${
-                  videoSpeed === 0.5
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <Turtle className="h-10 w-10" />
-                  <span className="text-xs">0.5x</span>
-                </div>
-              </button>
-              <button
-                onClick={() => setVideoSpeed(1.0)}
-                className={`py-3 px-6 rounded-lg font-semibold transition-colors ${
-                  videoSpeed === 1.0
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <Gauge className="h-10 w-10" />
-                  <span className="text-xs">1x</span>
-                </div>
-              </button>
-              <button
-                onClick={() => setVideoSpeed(2.0)}
-                className={`py-3 px-6 rounded-lg font-semibold transition-colors ${
-                  videoSpeed === 2.0
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <Rabbit className="h-10 w-10" />
-                  <span className="text-xs">2x</span>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
 
       <div className="absolute inset-0 z-10">
         <div className="absolute top-4 left-4 z-50">
@@ -1614,12 +1725,14 @@ export default function Camera() {
                 display: 'block',
                 visibility: 'visible',
                 opacity: stream ? 1 : 0,
-                width: streamIsLandscape !== (mode === 'video') ? '100vh' : '100vw',
-                height: streamIsLandscape !== (mode === 'video') ? '100vw' : '100vh',
+                width: streamIsLandscape !== viewportIsLandscape ? '100vh' : '100vw',
+                height: streamIsLandscape !== viewportIsLandscape ? '100vw' : '100vh',
                 transform:
-                  streamIsLandscape !== (mode === 'video')
-                    ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
-                    : 'translate(-50%, -50%) scaleX(-1)'
+                  streamIsLandscape !== viewportIsLandscape
+                    ? viewportIsLandscape
+                      ? 'translate(-50%, -50%) rotate(90deg)'
+                      : 'translate(-50%, -50%) rotate(-90deg)'
+                    : 'translate(-50%, -50%)'
               }}
               onLoadedMetadata={() => {
                     console.log('🎥 CAMERA DEBUG: onLoadedMetadata event fired')
@@ -1715,20 +1828,82 @@ export default function Camera() {
             {stream && (
               <>
                 {capturedMedia && (
-                  <div className="absolute inset-0 bg-black">
-                    {capturedMedia.type === 'photo' ? (
-                      <img
-                        src={capturedMedia.url}
-                        alt="Captured"
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <video
-                        src={capturedMedia.url}
-                        controls
-                        className="w-full h-full"
-                      />
-                    )}
+                  <div className="absolute inset-0 bg-black z-40 flex flex-col">
+                    <div className="flex-1 flex items-center justify-center">
+                      {capturedMedia.type === 'photo' ? (
+                        <img
+                          src={capturedMedia.url}
+                          alt="Captured"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <video
+                          src={capturedMedia.url}
+                          controls
+                          autoPlay
+                          className="w-full h-full"
+                        />
+                      )}
+                    </div>
+
+                    <div className="p-4 bg-black/70 flex items-center justify-between gap-3">
+                      {capturedShots.length > 1 ? (
+                        <div className="flex items-center gap-2 text-white/90">
+                          <button
+                            type="button"
+                            className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20"
+                            onClick={() => {
+                              const next = Math.max(0, previewIndex - 1)
+                              setPreviewIndex(next)
+                              setCapturedMedia(capturedShots[next])
+                            }}
+                            disabled={previewIndex <= 0}
+                            title="Previous"
+                          >
+                            Prev
+                          </button>
+                          <div className="text-sm">
+                            Shot {previewIndex + 1}/{capturedShots.length}
+                          </div>
+                          <button
+                            type="button"
+                            className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20"
+                            onClick={() => {
+                              const next = Math.min(capturedShots.length - 1, previewIndex + 1)
+                              setPreviewIndex(next)
+                              setCapturedMedia(capturedShots[next])
+                            }}
+                            disabled={previewIndex >= capturedShots.length - 1}
+                            title="Next"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-white/80 text-sm">
+                          Preview
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={discardCapture}
+                          disabled={isUploading}
+                        >
+                          Discard
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleSaveUploadAndDownload}
+                          disabled={isUploading}
+                        >
+                          {isUploading ? 'Saving…' : 'Save (Upload + Download)'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
@@ -1765,132 +1940,252 @@ export default function Camera() {
           </div>
 
           {/* Controls */}
-          <div className="absolute inset-x-0 bottom-0 z-30 p-4 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex flex-wrap justify-center gap-4">
+          <div className="absolute inset-x-0 bottom-0 z-30 p-4 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex flex-wrap justify-center gap-4 relative">
             {isLoading && !stream ? (
               <div className="flex items-center space-x-2 text-purple-600">
                 <RefreshCw className="h-5 w-5 animate-spin" />
                 <span>Starting camera...</span>
               </div>
-            ) : stream && videoRef.current && videoRef.current.paused && !videoReady ? (
-              <button
-                onClick={async () => {
-                  if (videoRef.current && stream) {
-                    console.log('🎥 CAMERA DEBUG: Manual play button clicked')
-                    const video = videoRef.current
-                    
-                    // Ensure srcObject is set
-                    if (!video.srcObject || video.srcObject !== stream) {
-                      console.log('🎥 CAMERA DEBUG: Setting srcObject in manual play')
-                      video.srcObject = stream
-                      // Wait for stream to attach
-                      await new Promise(resolve => setTimeout(resolve, 100))
-                    }
-                    
-                    // Check track states
-                    const tracks = stream.getTracks()
-                    console.log('🎥 CAMERA DEBUG: Stream tracks:', tracks.map(t => ({
-                      kind: t.kind,
-                      readyState: t.readyState,
-                      enabled: t.enabled
-                    })))
-                    
-                    // Ensure tracks are enabled
-                    tracks.forEach(track => {
-                      if (!track.enabled) {
-                        console.log(`🎥 CAMERA DEBUG: Enabling ${track.kind} track`)
-                        track.enabled = true
-                      }
-                    })
-                    
-                    // Ensure video is visible (required for some browsers on HTTPS)
-                    video.style.display = 'block'
-                    video.style.visibility = 'visible'
-                    video.style.opacity = '1'
-                    
-                    // Wait a moment for the stream to be fully attached
-                    await new Promise(resolve => setTimeout(resolve, 300))
-                    
-                    // Check if video has srcObject after wait
-                    console.log('🎥 CAMERA DEBUG: Video state before play:', {
-                      srcObject: !!video.srcObject,
-                      paused: video.paused,
-                      readyState: video.readyState,
-                      videoWidth: video.videoWidth,
-                      videoHeight: video.videoHeight
-                    })
-                    
-                    // Now try to play
-                    try {
-                      const playPromise = video.play()
-                      if (playPromise !== undefined) {
-                        await playPromise
-                        console.log('✅ CAMERA DEBUG: Manual play successful')
-                        
-                        // Force check for dimensions after play
-                        const checkDimensions = () => {
-                          if (videoRef.current) {
-                            const v = videoRef.current
-                            console.log('🎥 CAMERA DEBUG: Checking dimensions after play:', {
-                              paused: v.paused,
-                              readyState: v.readyState,
-                              videoWidth: v.videoWidth,
-                              videoHeight: v.videoHeight,
-                              currentTime: v.currentTime
-                            })
-                            
-                            if (v.videoWidth > 0 && v.videoHeight > 0) {
-                              console.log('✅ CAMERA DEBUG: Video has dimensions!')
-                              setVideoReady(true)
-                            } else if (v.readyState >= 2) {
-                              // Video has data but no dimensions yet, keep checking
-                              setTimeout(checkDimensions, 100)
-                            }
-                          }
-                        }
-                        
-                        // Check immediately and then periodically
-                        setTimeout(checkDimensions, 100)
-                        setTimeout(checkDimensions, 500)
-                        setTimeout(checkDimensions, 1000)
-                      }
-                    } catch (error) {
-                      console.error('❌ CAMERA DEBUG: Manual play failed:', error)
-                      console.error('❌ CAMERA DEBUG: Error details:', {
-                        name: error.name,
-                        message: error.message,
-                        stack: error.stack
-                      })
-                      alert(`Video play failed: ${error.message || error.name}. Please check browser permissions.`)
-                    }
-                  }
-                }}
-                className="btn-primary"
-              >
-                <Video className="inline-block mr-2 h-5 w-5" />
-                Start Video
-              </button>
             ) : stream ? (
               <>
-                {mode === 'photo' ? (
-                  <div className="flex flex-col items-center gap-2">
+                {videoRef.current &&
+                  videoRef.current.paused &&
+                  !videoReady &&
+                  !capturedMedia &&
+                  capturedShots.length === 0 && (
                     <button
-                      type="button"
-                      onClick={capturePhoto}
-                      disabled={isCapturing || isCountingDown || isUploading || !videoReady}
-                      title={!videoReady ? 'Waiting for camera to be ready...' : 'Take photo'}
-                      aria-label="Take photo"
-                      className={`relative h-20 w-20 rounded-full border-4 transition ${
-                        isCapturing || isCountingDown || isUploading || !videoReady
-                          ? 'border-gray-400 cursor-not-allowed opacity-70'
-                          : 'border-white hover:scale-[1.03] active:scale-[0.98]'
-                      }`}
-                      style={{
-                        background:
-                          isCapturing || isCountingDown || isUploading || !videoReady
-                            ? '#9ca3af'
-                            : '#ef4444'
+                      onClick={async () => {
+                        if (videoRef.current && stream) {
+                          console.log('🎥 CAMERA DEBUG: Manual play button clicked')
+                          const video = videoRef.current
+
+                          // Ensure srcObject is set
+                          if (!video.srcObject || video.srcObject !== stream) {
+                            console.log('🎥 CAMERA DEBUG: Setting srcObject in manual play')
+                            video.srcObject = stream
+                            // Wait for stream to attach
+                            await new Promise(resolve => setTimeout(resolve, 100))
+                          }
+
+                          // Check track states
+                          const tracks = stream.getTracks()
+                          console.log(
+                            '🎥 CAMERA DEBUG: Stream tracks:',
+                            tracks.map(t => ({
+                              kind: t.kind,
+                              readyState: t.readyState,
+                              enabled: t.enabled
+                            }))
+                          )
+
+                          // Ensure tracks are enabled
+                          tracks.forEach(track => {
+                            if (!track.enabled) {
+                              console.log(`🎥 CAMERA DEBUG: Enabling ${track.kind} track`)
+                              track.enabled = true
+                            }
+                          })
+
+                          // Ensure video is visible (required for some browsers on HTTPS)
+                          video.style.display = 'block'
+                          video.style.visibility = 'visible'
+                          video.style.opacity = '1'
+
+                          // Wait a moment for the stream to be fully attached
+                          await new Promise(resolve => setTimeout(resolve, 300))
+
+                          // Check if video has srcObject after wait
+                          console.log('🎥 CAMERA DEBUG: Video state before play:', {
+                            srcObject: !!video.srcObject,
+                            paused: video.paused,
+                            readyState: video.readyState,
+                            videoWidth: video.videoWidth,
+                            videoHeight: video.videoHeight
+                          })
+
+                          // Now try to play
+                          try {
+                            const playPromise = video.play()
+                            if (playPromise !== undefined) {
+                              await playPromise
+                              console.log('✅ CAMERA DEBUG: Manual play successful')
+
+                              // Force check for dimensions after play
+                              const checkDimensions = () => {
+                                if (videoRef.current) {
+                                  const v = videoRef.current
+                                  console.log('🎥 CAMERA DEBUG: Checking dimensions after play:', {
+                                    paused: v.paused,
+                                    readyState: v.readyState,
+                                    videoWidth: v.videoWidth,
+                                    videoHeight: v.videoHeight,
+                                    currentTime: v.currentTime
+                                  })
+
+                                  if (v.videoWidth > 0 && v.videoHeight > 0) {
+                                    console.log('✅ CAMERA DEBUG: Video has dimensions!')
+                                    setVideoReady(true)
+                                  } else if (v.readyState >= 2) {
+                                    // Video has data but no dimensions yet, keep checking
+                                    setTimeout(checkDimensions, 100)
+                                  }
+                                }
+                              }
+
+                              // Check immediately and then periodically
+                              setTimeout(checkDimensions, 100)
+                              setTimeout(checkDimensions, 500)
+                              setTimeout(checkDimensions, 1000)
+                            }
+                          } catch (error) {
+                            console.error('❌ CAMERA DEBUG: Manual play failed:', error)
+                            console.error('❌ CAMERA DEBUG: Error details:', {
+                              name: error.name,
+                              message: error.message,
+                              stack: error.stack
+                            })
+                            alert(
+                              `Video play failed: ${
+                                error.message || error.name
+                              }. Please check browser permissions.`
+                            )
+                          }
+                        }
                       }}
-                    />
+                      className="btn-primary"
+                    >
+                      <Video className="inline-block mr-2 h-5 w-5" />
+                      Start Video
+                    </button>
+                  )}
+
+                <div className="fixed left-4 bottom-4 z-50">
+                  {mode === 'photo' ? (
+                    <div className="flex flex-col items-start gap-2">
+                      <div className="text-xs font-semibold text-white/90">Number of Shots (3 secs)</div>
+                      <div className="flex flex-col gap-3 items-start">
+                        <button
+                          onClick={() => setShotCount(1)}
+                          className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                            shotCount === 1
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title="1 Shot"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <CameraIcon className="h-6 w-6" />
+                            <span className="text-xs">1</span>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setShotCount(2)}
+                          className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                            shotCount === 2
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title="2 Shots (3 second delay)"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="relative w-6 h-6 flex items-center justify-center">
+                              <CameraIcon className="h-6 w-6 absolute top-0 left-0" />
+                              <CameraIcon className="h-6 w-6 absolute top-0.5 left-0.5" />
+                            </div>
+                            <span className="text-xs">2</span>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setShotCount(3)}
+                          className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                            shotCount === 3
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                          title="3 Shots (3 second delay)"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="relative w-6 h-6 flex items-center justify-center">
+                              <CameraIcon className="h-6 w-6 absolute top-0 left-0" />
+                              <CameraIcon className="h-6 w-6 absolute top-0.5 left-0.5" />
+                              <CameraIcon className="h-6 w-6 absolute top-1 left-1" />
+                            </div>
+                            <span className="text-xs">3</span>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-start gap-2">
+                      <div className="text-xs font-semibold text-white/90">Video Speed</div>
+                      <div className="flex flex-col gap-2 items-start">
+                        <button
+                          onClick={() => setVideoSpeed(0.5)}
+                          className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                            videoSpeed === 0.5
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <Turtle className="h-6 w-6" />
+                            <span className="text-xs">0.5x</span>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setVideoSpeed(1.0)}
+                          className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                            videoSpeed === 1.0
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <Gauge className="h-6 w-6" />
+                            <span className="text-xs">1x</span>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setVideoSpeed(2.0)}
+                          className={`py-2 px-4 rounded-lg font-semibold transition-colors ${
+                            videoSpeed === 2.0
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <Rabbit className="h-6 w-6" />
+                            <span className="text-xs">2x</span>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {mode === 'photo' ? (
+                  <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={capturePhoto}
+                        disabled={Boolean(capturedMedia) || capturedShots.length > 0 || isCapturing || isCountingDown || isUploading || !videoReady}
+                        title={!videoReady ? 'Waiting for camera to be ready...' : 'Take photo'}
+                        aria-label="Take photo"
+                        className={`relative h-20 w-20 rounded-full border-4 transition ${
+                          Boolean(capturedMedia) || capturedShots.length > 0 || isCapturing || isCountingDown || isUploading || !videoReady
+                            ? 'border-gray-400 cursor-not-allowed opacity-70'
+                            : 'border-white hover:scale-[1.03] active:scale-[0.98]'
+                        }`}
+                        style={{
+                          background:
+                            Boolean(capturedMedia) || capturedShots.length > 0 || isCapturing || isCountingDown || isUploading || !videoReady
+                              ? '#9ca3af'
+                              : '#ef4444'
+                        }}
+                      />
+                    </div>
+
                     <div className="text-sm text-white/90">
                       {isCapturing
                         ? `Capturing ${capturedShots.length + 1}/${shotCount}...`
@@ -1900,23 +2195,25 @@ export default function Camera() {
                 ) : (
                   <>
                     {!isRecording ? (
-                      <div className="flex flex-col items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={startRecording}
-                          disabled={isCountingDown || isUploading || !videoReady}
-                          title={!videoReady ? 'Waiting for camera to be ready...' : 'Start recording'}
-                          aria-label="Start recording"
-                          className={`relative h-20 w-20 rounded-full border-4 transition ${
-                            isCountingDown || isUploading || !videoReady
-                              ? 'border-gray-400 cursor-not-allowed opacity-70'
-                              : 'border-white hover:scale-[1.03] active:scale-[0.98]'
-                          }`}
-                          style={{
-                            background:
-                              isCountingDown || isUploading || !videoReady ? '#9ca3af' : '#ef4444'
-                          }}
-                        />
+                      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={startRecording}
+                            disabled={Boolean(capturedMedia) || capturedShots.length > 0 || isCountingDown || isUploading || !videoReady}
+                            title={!videoReady ? 'Waiting for camera to be ready...' : 'Start recording'}
+                            aria-label="Start recording"
+                            className={`relative h-20 w-20 rounded-full border-4 transition ${
+                              Boolean(capturedMedia) || capturedShots.length > 0 || isCountingDown || isUploading || !videoReady
+                                ? 'border-gray-400 cursor-not-allowed opacity-70'
+                                : 'border-white hover:scale-[1.03] active:scale-[0.98]'
+                            }`}
+                            style={{
+                              background:
+                                Boolean(capturedMedia) || capturedShots.length > 0 || isCountingDown || isUploading || !videoReady ? '#9ca3af' : '#ef4444'
+                            }}
+                          />
+                        </div>
 
                         <div className="flex flex-wrap gap-3 justify-center">
                           <button
@@ -1940,7 +2237,7 @@ export default function Camera() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-2">
+                      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
                         <button
                           type="button"
                           onClick={stopRecording}
@@ -1978,23 +2275,21 @@ export default function Camera() {
 
             {(capturedMedia || capturedShots.length > 0) && (
               <>
-                {currentEvent && (
-                  <button 
-                    onClick={saveMedia} 
-                    className="btn-primary"
-                    disabled={isUploading}
+                {capturedMedia?.type === 'video' && (
+                  <button
+                    onClick={shareCapturedMedia}
+                    className="btn-secondary fixed right-4 bottom-16 z-50"
                   >
-                    {isUploading ? (
-                      <>
-                        <Cloud className="inline-block mr-2 h-5 w-5 animate-pulse" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Cloud className="inline-block mr-2 h-5 w-5" />
-                        Save & Upload
-                      </>
-                    )}
+                    Save/Share Video
+                  </button>
+                )}
+
+                {capturedMedia?.type === 'video' && (
+                  <button
+                    onClick={downloadCapturedMedia}
+                    className="btn-secondary fixed right-4 bottom-28 z-50"
+                  >
+                    Download Video
                   </button>
                 )}
               </>
