@@ -14,6 +14,8 @@ export default function EventDetail() {
   const { isAuthenticated } = useAuth()
   const [selectedMedia, setSelectedMedia] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+  const [remoteMedia, setRemoteMedia] = useState([])
+  const [remoteMediaLoading, setRemoteMediaLoading] = useState(false)
   const [qrToken, setQrToken] = useState(null)
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState(null)
@@ -22,6 +24,50 @@ export default function EventDetail() {
   const [zipProgress, setZipProgress] = useState({ done: 0, total: 0 })
 
   const event = getEventById(eventId)
+
+  const mediaList = (remoteMedia?.length ? remoteMedia : event?.media) || []
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadRemoteMedia = async () => {
+      if (!isAuthenticated || !event?.supabaseEventId) {
+        setRemoteMedia([])
+        return
+      }
+
+      setRemoteMediaLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('media')
+          .select('id,type,public_url,storage_path,created_at')
+          .eq('event_id', event.supabaseEventId)
+          .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        const mapped = (data || []).map((m) => ({
+          id: String(m.id),
+          type: m.type,
+          supabaseUrl: m.public_url,
+          storagePath: m.storage_path,
+          timestamp: m.created_at
+        }))
+
+        if (!cancelled) setRemoteMedia(mapped)
+      } catch (e) {
+        console.error('Failed to load remote media:', e)
+        if (!cancelled) setRemoteMedia([])
+      } finally {
+        if (!cancelled) setRemoteMediaLoading(false)
+      }
+    }
+
+    loadRemoteMedia()
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, event?.supabaseEventId])
 
   useEffect(() => {
     const ensureAccessLink = async () => {
@@ -145,7 +191,7 @@ export default function EventDetail() {
       return
     }
 
-    const mediaWithUrls = (event.media || []).filter((m) => m.supabaseUrl)
+    const mediaWithUrls = (mediaList || []).filter((m) => m.supabaseUrl)
     if (mediaWithUrls.length === 0) {
       alert('No uploaded media (Supabase URLs) found for this event.')
       return
@@ -244,13 +290,13 @@ export default function EventDetail() {
           <div className="flex items-center space-x-4 mt-4 md:mt-0">
             <div className="text-center">
               <div className="text-2xl font-bold text-purple-500">
-                {event.media.filter(m => m.type === 'photo').length}
+                {mediaList.filter(m => m.type === 'photo').length}
               </div>
               <div className="text-sm text-gray-600">Photos</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-purple-500">
-                {event.media.filter(m => m.type === 'video').length}
+                {mediaList.filter(m => m.type === 'video').length}
               </div>
               <div className="text-sm text-gray-600">Videos</div>
             </div>
@@ -284,7 +330,11 @@ export default function EventDetail() {
         </div>
       </div>
 
-      {event.media.length === 0 ? (
+      {remoteMediaLoading ? (
+        <div className="card text-center py-12">
+          <div className="text-gray-600">Loading media…</div>
+        </div>
+      ) : mediaList.length === 0 ? (
         <div className="card text-center py-12">
           <ImageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <h2 className="text-2xl font-semibold text-gray-700 mb-2">No Media Yet</h2>
@@ -296,7 +346,7 @@ export default function EventDetail() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {event.media.map(media => (
+            {mediaList.map(media => (
               <div
                 key={media.id}
                 className="relative group cursor-pointer bg-black rounded-lg overflow-hidden aspect-square"

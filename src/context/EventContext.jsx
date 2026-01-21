@@ -69,7 +69,9 @@ export function EventProvider({ children }) {
     date: row.date,
     createdAt: row.created_at || new Date().toISOString(),
     // Media is stored in Supabase `media` table; keep empty array here to avoid UI crashes.
-    media: []
+    media: [],
+    photoCount: 0,
+    videoCount: 0
   })
 
   const loadEventsFromSupabase = useCallback(async () => {
@@ -79,7 +81,35 @@ export function EventProvider({ children }) {
       .order('date', { ascending: false })
 
     if (error) throw error
-    return (data || []).map(normalizeSupabaseEvent)
+
+    const rows = data || []
+
+    const countMedia = async (eventId, type) => {
+      try {
+        const { count, error: countError } = await supabase
+          .from('media')
+          .select('id', { count: 'exact', head: true })
+          .eq('event_id', eventId)
+          .eq('type', type)
+
+        if (countError) return 0
+        return count || 0
+      } catch {
+        return 0
+      }
+    }
+
+    // Best-effort counts so the admin event cards reflect Supabase uploads across browsers.
+    return await Promise.all(
+      rows.map(async (row) => {
+        const base = normalizeSupabaseEvent(row)
+        const [photoCount, videoCount] = await Promise.all([
+          countMedia(row.id, 'photo'),
+          countMedia(row.id, 'video')
+        ])
+        return { ...base, photoCount, videoCount }
+      })
+    )
   }, [])
 
   // Keep events list Supabase-primary for admins; cache to localStorage as fallback.

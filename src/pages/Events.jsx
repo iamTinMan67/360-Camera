@@ -411,11 +411,15 @@ export default function Events() {
                 <div className="flex items-center space-x-6">
                   <span className="flex items-center">
                     <ImageIcon className="h-5 w-5 mr-2" />
-                    {event.media.filter(m => m.type === 'photo').length}
+                    {typeof event.photoCount === 'number'
+                      ? event.photoCount
+                      : event.media.filter(m => m.type === 'photo').length}
                   </span>
                   <span className="flex items-center">
                     <Video className="h-5 w-5 mr-2" />
-                    {event.media.filter(m => m.type === 'video').length}
+                    {typeof event.videoCount === 'number'
+                      ? event.videoCount
+                      : event.media.filter(m => m.type === 'video').length}
                   </span>
                 </div>
               </div>

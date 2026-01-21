@@ -18,6 +18,9 @@ export default function Camera() {
   const chunksRef = useRef([])
   const recordingTimeoutRef = useRef(null)
   const videoAutoOpenWindowRef = useRef(null)
+  const recordingCanvasRef = useRef(null)
+  const recordingCanvasStreamRef = useRef(null)
+  const recordingCanvasRafRef = useRef(null)
 
   const [stream, setStream] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -96,6 +99,39 @@ export default function Camera() {
   const isSafari = () => {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent) || 
            (navigator.userAgent.includes('Mac') && navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome'))
+  }
+
+  // Detect iOS/iPadOS (including iPadOS reporting as Mac)
+  const isIOS = () => {
+    return /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints && navigator.maxTouchPoints > 1)
+  }
+
+  const cleanupCanvasRecording = () => {
+    try {
+      if (recordingCanvasRafRef.current) {
+        cancelAnimationFrame(recordingCanvasRafRef.current)
+      }
+    } catch {
+      // ignore
+    } finally {
+      recordingCanvasRafRef.current = null
+    }
+
+    try {
+      // Stop any tracks created by canvas.captureStream (audio tracks are from the real stream and should not be stopped here)
+      const s = recordingCanvasStreamRef.current
+      if (s?.getVideoTracks) {
+        s.getVideoTracks().forEach((t) => {
+          try { t.stop() } catch { /* ignore */ }
+        })
+      }
+    } catch {
+      // ignore
+    } finally {
+      recordingCanvasStreamRef.current = null
+      recordingCanvasRef.current = null
+    }
   }
 
   // Detect mobile/tablet devices
@@ -990,9 +1026,18 @@ export default function Camera() {
             context.translate(canvas.width, 0)
             context.rotate(Math.PI / 2)
           } else {
-            // landscape stream -> portrait output (rotate counter-clockwise)
-            context.translate(0, canvas.height)
-            context.rotate(-Math.PI / 2)
+            // landscape stream -> portrait output
+            // iOS/iPadOS camera streams can require the opposite 90° direction to match the
+            // on-device "upright" expectation when saved to Photos/Files.
+            if (isIOS()) {
+              // rotate clockwise
+              context.translate(canvas.width, 0)
+              context.rotate(Math.PI / 2)
+            } else {
+              // rotate counter-clockwise
+              context.translate(0, canvas.height)
+              context.rotate(-Math.PI / 2)
+            }
           }
 
           context.drawImage(video, 0, 0, vw, vh)
@@ -1197,6 +1242,81 @@ export default function Camera() {
       videoRef.current.playbackRate = videoSpeed
     }
 
+    // If the camera stream orientation doesn't match the viewport (we rotate the preview),
+    // record from an oriented canvas stream so the saved file matches the upright preview.
+    cleanupCanvasRecording()
+    let recordingStream = stream
+    const desiredLandscape = viewportIsLandscape
+    const needsRotation = streamIsLandscape !== desiredLandscape
+
+    if (needsRotation && videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
+      try {
+        const srcVideo = videoRef.current
+        const vw = srcVideo.videoWidth
+        const vh = srcVideo.videoHeight
+
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('2D canvas context unavailable')
+
+        // Rotate 90° to match preview transform:
+        // - portrait viewport: rotate -90° (counter-clockwise)
+        // - landscape viewport: rotate +90° (clockwise)
+        canvas.width = vh
+        canvas.height = vw
+
+        const draw = () => {
+          // Keep drawing while recording
+          try {
+            ctx.save()
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+            if (desiredLandscape) {
+              ctx.translate(canvas.width, 0)
+              ctx.rotate(Math.PI / 2)
+            } else {
+              ctx.translate(0, canvas.height)
+              ctx.rotate(-Math.PI / 2)
+            }
+
+            // Use current frame dimensions (can stabilize after start)
+            const cw = srcVideo.videoWidth || vw
+            const ch = srcVideo.videoHeight || vh
+            ctx.drawImage(srcVideo, 0, 0, cw, ch)
+            ctx.restore()
+          } catch {
+            // ignore drawing errors; keep loop alive
+          }
+          recordingCanvasRafRef.current = requestAnimationFrame(draw)
+        }
+
+        recordingCanvasRef.current = canvas
+
+        // 30fps is a good balance for iPad
+        const canvasStream = canvas.captureStream ? canvas.captureStream(30) : null
+        if (!canvasStream) throw new Error('canvas.captureStream not supported')
+
+        // Keep audio (if available) from the real stream
+        const audioTrack = stream.getAudioTracks?.()[0]
+        if (audioTrack) {
+          try {
+            canvasStream.addTrack(audioTrack)
+          } catch {
+            // ignore
+          }
+        }
+
+        recordingCanvasStreamRef.current = canvasStream
+        recordingStream = canvasStream
+
+        recordingCanvasRafRef.current = requestAnimationFrame(draw)
+      } catch (e) {
+        console.warn('Canvas recording setup failed; falling back to raw stream.', e)
+        cleanupCanvasRecording()
+        recordingStream = stream
+      }
+    }
+
     const mimeType = getSupportedMimeType()
     const options = mimeType ? { mimeType } : {}
 
@@ -1204,7 +1324,7 @@ export default function Camera() {
     let recordedMimeType = mimeType || 'video/webm'
 
     try {
-      mediaRecorder = new MediaRecorder(stream, options)
+      mediaRecorder = new MediaRecorder(recordingStream, options)
       // Store the actual mime type used by the recorder
       recordedMimeType = mediaRecorder.mimeType || recordedMimeType
       console.log('MediaRecorder created:', {
@@ -1215,7 +1335,7 @@ export default function Camera() {
       console.error('Error creating MediaRecorder:', error)
       // Try without mime type specification
       try {
-        mediaRecorder = new MediaRecorder(stream)
+        mediaRecorder = new MediaRecorder(recordingStream)
         recordedMimeType = mediaRecorder.mimeType || 'video/webm'
         console.log('MediaRecorder created (fallback):', {
           mimeType: recordedMimeType,
@@ -1224,6 +1344,7 @@ export default function Camera() {
       } catch (fallbackError) {
         console.error('Error creating MediaRecorder (fallback):', fallbackError)
         alert('Unable to start video recording. Your browser may not support video recording.')
+        cleanupCanvasRecording()
         return
       }
     }
@@ -1240,6 +1361,8 @@ export default function Camera() {
         clearTimeout(recordingTimeoutRef.current)
         recordingTimeoutRef.current = null
       }
+
+      cleanupCanvasRecording()
 
       console.log('Recording stopped, chunks:', chunksRef.current.length)
       // Use the actual mime type from the recorder, or fallback
@@ -1305,6 +1428,8 @@ export default function Camera() {
         clearTimeout(recordingTimeoutRef.current)
         recordingTimeoutRef.current = null
       }
+      // If onstop doesn't fire for any reason, ensure canvas loop stops.
+      cleanupCanvasRecording()
     }
   }
 
